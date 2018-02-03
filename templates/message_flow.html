@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Message Flow</title>
+        <style>
+        body {background - color: powderblue; font-family: Lucida Console, Courier, monospace}
+        h1   {color: blue;}
+        p    {color: red;}
+        td   {white-space: nowrap;
+              font-size: small}
+        .flexbox {
+            }
+        .box-1 {
+            float: top;
+            height: 60vh;
+            background-color: lightblue;
+            overflow: scroll;
+            }
+        .box-2 {
+            float: bottom;
+            height: 40vh;
+            background-color: lightgreen;
+            overflow: scroll;
+            }
+
+        </style>
+</head>
+<body>
+    <div class="flexbox">
+        <div class="box-1">
+            {{ flow }}
+        </div>
+        <div class="box-2">
+            <h1>BOX 2</h1>
+        </div>
+    </div>
+</body>
+</html>

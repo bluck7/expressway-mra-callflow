@@ -1,0 +1,231 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+
+	<title>Expressway Call Flow</title>
+
+	<link type="text/css" rel="stylesheet" href="/static/layout-default-latest.css" />
+    <link type="text/css" rel="stylesheet" href="/static/sequence-diagram.css" />
+
+	<style type="text/css">
+	/*
+	 *	Cosmetic Styles
+	 */
+	body {
+		font-family:	Arial, sans-serif;
+		font-size:		100%;
+		*font-size:		0.8em; /* IE 6/7 only */
+	}
+	table {
+	    margin-top: 10px;
+	}
+    th {
+        font-family: monospace;
+        font-size: large;
+        padding: 0 0.5em 0 0.5em;
+        line-height: 2em;
+        border-bottom-width: 1px;
+        border-bottom-style: solid;
+    }
+    td {
+        background: lightblue;
+        white-space: nowrap;
+        font-size: small;
+        font-family: monospace;
+        padding: 0 0.5em 0 0.5em;
+    }
+    td.phone1, td.turn1, td.proxy1in, td.cucm, td.proxy3in, td.proxy5in, td.phone2 {
+        border-left: double 4px
+    }
+    td.phone1, td.b2bua1, td.cucm, td.b2bua2, td.phone2 {
+        background: lightsteelblue;
+    }
+	p {
+		font-size:		1em;
+		margin:			1em 0;
+	}
+
+	/* Remove the underscore on links */
+	a {
+	    text-decoration: none;
+	}
+	button {
+		line-height:	normal;
+	}
+
+	/*
+	 *	CUSTOMIZE LAYOUT SETTINGS
+	 */
+	.ui-layout-north {
+		background:		#EEE;
+		border-bottom:	1px;
+		padding:		10px 20px;
+	}
+	.ui-layout-center {
+		border-top:		0;
+		padding:		0 10px 10px;
+	}
+	.ui-layout-south {
+		padding:		5px;
+		white-space:    nowrap;
+		border:         1px solid;
+	}
+	.ui-layout-south div {
+		padding:		4px 15px;
+		background:		#FEE;
+		border:			1px solid #C00;
+	}
+	.ui-layout-south div.ui-layout-content {
+		background:		#FFF;
+		border:         0
+	}
+
+	</style>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    <script src="/static/jquery.layout_and_plugins.js"></script>
+    <script src="/static/convert.js"></script>
+    <script type="text/javascript">
+
+        var myLayout;
+
+        $(document).ready(function () {
+
+            myLayout = $('body').layout({
+                south__size:			Math.floor(screen.availHeight * .20) // 20% screen height
+            ,	north__spacing_open:	4
+            });
+
+        });
+
+        $(function()
+        {
+            $('#get_packet_relay_info_e').bind('click', function()
+            {
+                $.get('/get_packet_relay_info_e', function(data) {
+                    var w = window.open();
+                    $(w.document.body).html(data)
+            	});
+          	});
+
+            $('#get_packet_relay_info_c').bind('click', function()
+            {
+                $.get('/get_packet_relay_info_c', function(data) {
+                    var w = window.open();
+                    $(w.document.body).html(data)
+            	});
+          	});
+
+            $('#get_packet_relay_info_turn').bind('click', function()
+            {
+                $.get('/get_packet_relay_info_turn', function(data) {
+                    var w = window.open();
+                    $(w.document.body).html(data)
+            	});
+          	});
+
+            $('#get_ascii_table').bind('click', function()
+            {
+                $.get('/get_ascii_table', function(data) {
+                    var w = window.open();
+                    $(w.document.body).html(data)
+            	});
+          	});
+        });
+
+        $(function()
+        {
+            $('#save_data').bind('click', function()
+            {
+                $.get('/save_data', function(data) {
+                    alert(data)
+                });
+            });
+        });
+
+        $(function()
+        {
+            $('#load_table').bind('click', function()
+            {
+                $.get('/load_table', function(data) {
+                    $(".ui-layout-center").html(data);
+                    $('a').bind('click', function(event)
+                    {
+                        get_file_snippet(event)
+                    });
+                });
+            });
+        });
+
+        $(function()
+        {
+            $('#load_sequence_diagram').bind('click', function()
+            {
+                $.get('/load_sequence_diagram', function(data) {
+                    $(".ui-layout-center").html(data);
+                    $('a').bind('click', function(event)
+                    {
+                        get_file_snippet(event)
+                    });
+                });
+            });
+        });
+
+        $(function()
+        {
+            $('a').bind('click', function(event)
+            {
+                get_file_snippet(event)
+            });
+        });
+
+        function get_file_snippet(event)
+        {
+            lineinfo = event.target.href.split('#')
+            filename = lineinfo[1]
+            linenum  = lineinfo[2]
+            console.log("filename = " + filename)
+            console.log("linenum = " + linenum)
+            selector = "#line-" + linenum
+            console.log("selector = " + selector)
+            $.get('/get_file', { file: filename, line: linenum }, function(data) {
+                console.log("Received data, displaying on .ui-layout-south...")
+                $(".ui-layout-south").html(data);
+                console.log("Finished appending to .ui-layout-south, waiting for pane to refresh...")
+                $(".ui-layout-south").scrollTop(0)
+                desiredScrollPos = $(selector).position().top
+                console.log("desiredScrollPos=" + desiredScrollPos)
+                $(".ui-layout-south").animate({scrollTop: desiredScrollPos}, 500);
+                $(selector).css({background: "lightgreen", display: "inline"})
+            });
+        }
+
+
+	</script>
+
+</head>
+<body>
+
+<div class="ui-layout-north">
+	<button id="get_packet_relay_info_e">Get Packet Relay Info on E</button>
+	<button id="get_packet_relay_info_c">Get Packet Relay Info on C</button>
+	<button id="get_packet_relay_info_turn">Get Packet Relay Info on TURN</button>
+	<button id="get_ascii_table">Export to ASCII</button>
+	<button id="save_data">Save Data</button>
+	<button id="load_table">Load Table</button>
+	<button id="load_sequence_diagram">Load Sequence Diagram</button>
+</div>
+
+<div class="ui-layout-center">
+    <div class="flow">
+        {{ flow }}
+    </div>
+</div>
+
+<div class="ui-layout-south">
+</div>
+
+</body>
+</html>

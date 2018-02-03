@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload Expressway Log Files</title>
+    <style>
+        body {
+            font-size: 12px;
+            font-family: arial, Verdana, sans-serif;
+            color: #666666;
+        }
+        h1 {
+            height: 48px;
+            line-height: 48px;
+            background: #e8e8e8;
+            padding: 0 10px;
+        }
+        p {
+            font-size: 14px;
+        }
+        label {
+            font-size: 12px;
+        }
+        .indent {
+            padding-left: 1.8em
+        }
+        fieldset {
+            margin-top: 1em;
+        }
+        fieldset {
+            width: 800px;
+            display: block;
+            margin-bottom: 1.5em;
+            border: 1px solid #7e9eae;
+            padding-top: 0;
+            padding-bottom: 11px;
+            padding-left: 5px;
+            padding-right: 5px;
+            line-height: 1em;
+            background: #ebf1f4;
+        }
+        legend {
+            border: 1px solid #7e9eae;
+            padding: 5px;
+            margin-bottom: 8px;
+            min-width: 250px;
+            background: #dbe6eb;
+            color: #4a7489;
+            font-weight: bold;
+        }
+        button, input[type="submit"] {
+            min-width: 120px;
+            height: 2em;
+            /*margin: 5px;*/
+            background-color: lightgrey;
+            border-right: 1px solid #000000;
+            border-bottom: 1px solid #000000;
+            border-top: 0;
+            border-left: 1px solid #d3d5d5;
+            padding: 0px 3px;
+            margin: 0px 2px;
+            text-align: center;
+            vertical-align: middle;
+            box-sizing: border-box;
+        }
+        input[type="radio"] {
+            margin-left: 20px
+        }
+        input[type="file"] {
+            width: 500px
+        }
+        .textlabel {
+            display: inline-block;
+            text-align: right;
+            float: left;
+            margin: 5px;
+            line-height: 10px
+        }
+    </style>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+    <script>
+        $(function() {
+            $('#deployment').bind('click', function() {
+            });
+        });
+
+        $(function()
+        {
+            $('#check_log_levels').bind('click', function()
+            {
+                $.get('/check_log_levels', function(data) {
+                    alert(data)
+                });
+            });
+        });
+
+    </script>
+</head>
+<body>
+    <h1>Expressway Mobile Remote Access (MRA) Log Analyzer</h1>
+    <div style="margin-left: 10px">
+        <form action = "/uploader" method = "POST" enctype="multipart/form-data">
+            <fieldset>
+                <legend>Testbed</legend>
+                <div style="margin-left: 5px">
+                    <p>Select the testbed you are using</p>
+                    <label>
+                        <input type = "radio" name = "deployment" id="dep_bud" value="bud" required> Bud's testbed<br>
+                        <input type = "radio" name = "deployment" id="dep_mandar" value="mandar" required> Mandar's testbed<br>
+                        <input type = "radio" name = "deployment" id="dep_wei" value="wei" required> Wei's testbed (call goes through wsun2-test2)<br>
+                        <input type = "radio" name = "deployment" id="dep_wei3" value="wei3" required> Wei's testbed (call goes through wsun2-test3)<br>
+                        <input type = "radio" name = "deployment" id="dep_sl" value="slteam" required> Synergy-Lite phone team's testbed<br><br>
+                        <input type = "radio" name = "deployment" id="dep_other" value="other" required> Other (fill in IPs below)<br>
+                    </label>
+
+                    <div class="textlabel">
+                        <div>
+                            <label style="width: 170px" class="textlabel" for="expeip">Expressway-E IP address:</label>
+                            <input type = "text" name = "ipE" id="expeip" />
+                        </div>
+                        <div>
+                            <label style="width: 170px" class="textlabel" for="expcip">Expressway-C IP address:</label>
+                            <input type = "text" name = "ipC" id="expcip" />
+                        </div>
+                        <div>
+                            <label style="width: 170px" class="textlabel" for="expcintip">Internal Exp-C (optional):</label>
+                            <input type = "text" name = "ipInternalC" id="expcintip" />
+                        </div>
+                        <div>
+                            <label style="width: 170px" class="textlabel" for="cucmip">CUCM IP address:</label>
+                            <input type = "text" name = "ipCucm" id="cucmip" />
+                        </div>
+                    </div>
+                </div>
+            </fieldset>
+            <fieldset>
+                <legend>Log Files</legend>
+                <div style="margin-left: 5px">
+                    <p>Enter the Expressway-E and Expressway-C log files. Click Submit to analyze.</p>
+                    <p class="indent">
+                        <label for="expefile">
+                            Expressway-E Logfile: <input type = "file" name = "fileE" id="expefile" />
+                        </label>
+                    </p>
+                    <p class="indent">
+                        <label for="expcfile">
+                            Expressway-C Logfile: <input type = "file" name = "fileC" id="expcfile" />
+                        </label>
+                    </p>
+                    <p class="indent">
+                        <label for="turnfile">
+                            TURN server Logfile (if different from E): <input type = "file" name = "fileTURN" id="turnfile" />
+                        </label>
+                    </p>
+                </div>
+            </fieldset>
+            <input type = "submit"/>
+        </form>
+        <p>OR</p>
+        <form action="/load_main_with_table">
+            <input type="submit" value="Load Prebuilt Table" />
+        </form>
+        <p>OR</p>
+        <form action="/load_main_empty">
+            <input type="submit" value="Load Empty Page" />
+        </form>
+        <fieldset style="margin-top: 40px">
+            <legend>Log settings on the Expressways</legend>
+            <div style="margin-left: 5px">
+                <p>Use the buttons below to set the logging levels needed for this analyzer.</p>
+                <div style="margin-left: 10px">
+                    <button id='check_log_levels'>Check Log Levels</button>
+                    <button id='set_log_levels'>Set Log Levels</button>
+                    <button id='clear_log_levels'>Clear Log Levels</button>
+                </div>
+            </div>
+        </fieldset>
+    </div>
+</body>
+</html>
