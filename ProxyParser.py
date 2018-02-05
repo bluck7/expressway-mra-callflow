@@ -16,7 +16,7 @@ import requests
 
 
 
-UPLOAD_FOLDER = '/Users/bluck/PycharmProjects/ICETools/uploaded_files'
+UPLOAD_FOLDER = '/Users/bluck/PycharmProjects/expressway-mra-callflow/uploaded_files'
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -35,6 +35,9 @@ gProxyList = None
 gCurrFilename, gCurrLinenum = None, None
 gPortAssignment = {}
 gB2buaPortAssignment = {}
+gCallIDMap = {}
+gLastReqSent = None
+gPhone1IP = None
 
 def timestamp_url_handler(error, endpoint, values):
     # build the url to use in the timestamp link in the message flow table. The Flask Table package uses
@@ -60,7 +63,7 @@ ProxyNamedTuple = namedtuple('ProxyNamedTuple', 'this individNum direction fromN
 
 
 class Log:
-    def __init__(self, this='', timestamp='', shortLog='', longLog='', direction='', rawTimestamp=None, currLineNum=None):
+    def __init__(self, this='', timestamp='', shortLog='', longLog='', direction='', rawTimestamp=None, currLineNum=None, srcEntity=''):
         self.this      = this
         if rawTimestamp is not None:
             # Caller already converted the timestamp
@@ -76,6 +79,7 @@ class Log:
         else:
             self.linenum   = gCurrLinenum
         self.filename  = gCurrFilename
+        self.srcEntity = srcEntity
 
     def getShortLogHtml(self):
         return self.shortLog.replace(' ', '&nbsp;')
@@ -1178,22 +1182,23 @@ p_mline = compile('m={media:w} {port:d} {mediatype:S}')
 p_rtcp = compile('a=rtcp:{port:d}')
 p_remotecandidates = compile('a=remote-candidates:{comp1:d} {remoteIP1:S} {remotePort1:d} {comp2:d} {remoteIP2:S} {remotePort2:d}')
 
-gCallIDMap = {}
 
 def parse_networkSipDebug(line, f):
-    global gLogList, gPortAssignment, gB2buaPortAssignment,  gCurrLinenum, gCallIDMap, gCucmIP
+    global gLogList, gPortAssignment, gB2buaPortAssignment,  gCurrLinenum, gCallIDMap, gCucmIP, gPhone1IP, gExpEIP
 
     direction = 'sent'
     r = p_networkSipReceivedDebug.parse(line)
     if r is not None:
         direction = 'rcvd'
-        ip = r['srcIP']
-        logId = ip
+        remoteIP = r['srcIP']
+        localIP = r['localIP']
+        logId = remoteIP
     else:
         r = p_networkSipSentDebug.parse(line)
         if r is not None:
-            ip = r['destIP']
-            logId = ip
+            remoteIP = r['destIP']
+            localIP = r['localIP']
+            logId = remoteIP
         else:
             return False
 
@@ -1210,10 +1215,13 @@ def parse_networkSipDebug(line, f):
     totag = False
     isRequest = False
     reqUri = ''
+    contact = ''
     callid = None
-    fromCUCM = None
-    hasRouteHeader = False
     smallCallId = ''
+    fromCUCM = None
+    fromB2BUA = None
+    fromProxy = None
+    srcEntity = None
     viaIsCucm = False
     routeIsCucm = False
     msgType = 'Unknown'
@@ -1243,6 +1251,9 @@ def parse_networkSipDebug(line, f):
                     # Ignore 100 Trying, doesn't add anything to the troubleshooting
                 #    return True
 
+        if msgType.startswith('OPTIONS'):
+            # don't waste our time with OPTIONS
+            return True
 
         # Responses don't have Route header so need to use Via. If Via contains a CUCM zone and its a response, then
         # the message is heading towards the CUCM (because Via is used to route the message)
@@ -1282,96 +1293,122 @@ def parse_networkSipDebug(line, f):
         # Check if its a Route header and if so, whether it contains CEtcp or CEtls, either of which indicate the
         # message is a request and is heading twoards the CUCM.
         if line.startswith("Route:"):
-            hasRouteHeader = True
             if "CEtcp" in line or "CEtls" in line:
                 routeIsCucm = True
 
         # See if this message is from CUCM
-        if line.startswith("Server:") and 'Cisco-CUCM' in line:
-            fromCUCM = True
-        if line.startswith("User-Agent:") and 'Cisco-CUCM' in line:
-            fromCUCM = True
+        if line.startswith("Server:") or line.startswith("User-Agent:"):
+            if 'Cisco-CUCM' in line:
+                fromCUCM = True
+            elif 'b2bua' in line:
+                fromB2BUA = True
+            elif 'TANDBERG' in line:
+                fromProxy = True
+
+        # Grab the IP address in the Contact header. We can use this to identify the first phone using the first
+        # INVITE received
+        if line.startswith("Contact:"):
+            contact = line
+            if gPhone1IP is None and 'INVITE' in msgType:
+                gPhone1IP = line.split('@')[1].split(':')[0]
 
         # Check if we're done processing headers
-        if line.startswith('Content-Length') and appIsB2bua:
-            # Finished with headers so now we can figure out where we are in the call flow for b2bua.
-            # Determine which column in the table this port belongs to. If there's no To tag and the message
-            # is a request, we know the message is traveling left to right in the call flow so we use this
-            # assumption to build the gCallIDMap that we'll use for subsequent messages.
-            if not totag and isRequest:
-                if direction is 'rcvd' and routeIsCucm:
-                    # This is the first B2BUA becaue it is the first INVITE being sent to CUCM
-                    callFlowLocation = 'b2bua1in'
-                    gCallIDMap[callid] = 'b2bua1'
-                elif direction is 'rcvd' and not routeIsCucm:
-                    # This is the second B2BUA because it is the first INVITE and not heading for the CUCM
-                    callFlowLocation = 'b2bua2in'
-                    gCallIDMap[callid] = 'b2bua2'
-                elif direction is 'sent' and routeIsCucm:
-                    # This is the first B2BUA becaue it is the first INVITE being sent to CUCM
-                    callFlowLocation = 'b2bua1out'
-                    gCallIDMap[callid] = 'b2bua1'
-                elif direction is 'sent' and not routeIsCucm:
-                    # This is the second B2BUA because it is the first INVITE and not heading for the CUCM
-                    callFlowLocation = 'b2bua2out'
-                    gCallIDMap[callid] = 'b2bua2'
-            else:
-                # The message either has a To tag or its a response without a To tag (e.g. 100 Trying to the
-                # initial INVITE). Either way we should have the From tag in our map to learn which b2bua it is
-                # (1 or 2) and then figure out whether its the 'in' side or 'out' side. 'In' is always the left
-                # side of the b2bua in the flow, and 'out' is the right side.
+        if line.startswith('Content-Length'):
+            # Finished with headers so now we can figure out where we are in the call flow.
+            if appIsB2bua:
+                # This is a b2bua log.
+                callFlowLocation = calculateB2buaCallFlowLocation(callFlowLocation, callid, direction, fromCUCM, isRequest,
+                                                                  msgType, msgTypeLinenum, msgTypeTimestamp, reqUri,
+                                                                  routeIsCucm, totag, viaIsCucm)
+                # If we successfully identified the b2bua call flow location (e.g. 'b2bua1in') update our logId which
+                # starts out with just the IP address of the entity.
+                if 'b2bua' in callFlowLocation:
+                    logId = callFlowLocation
 
-                # If a To tag is present, this is not a dialog-initiating request so use the callID mapping we
-                # created above when the dialog was initiated to figure out which b2bua we're on. From there we
-                # can figure out which side of the b2bua.
-                b2buaInstance = gCallIDMap.get(callid, '')
-
-                if b2buaInstance is 'b2bua1' and direction is 'sent' and isRequest:
-                    if gCucmIP in reqUri:
-                        callFlowLocation = 'b2bua1out'
-                    else:
-                        callFlowLocation = 'b2bua1in'
-
-                elif b2buaInstance is 'b2bua1' and direction is 'sent' and not isRequest:
-                    if viaIsCucm:
-                        callFlowLocation = 'b2bua1out'
-                    else:
-                        callFlowLocation = 'b2bua1in'
-
-                elif b2buaInstance is 'b2bua1' and direction is 'rcvd' and fromCUCM:
-                    callFlowLocation = 'b2bua1out'
-
-                elif b2buaInstance is 'b2bua1' and direction is 'rcvd' and not fromCUCM:
-                    callFlowLocation = 'b2bua1in'
-
-
-
-                elif b2buaInstance is 'b2bua2' and direction is 'sent' and isRequest:
-                    if gCucmIP in reqUri:
-                        callFlowLocation = 'b2bua2in'
-                    else:
-                        callFlowLocation = 'b2bua2out'
-
-                elif b2buaInstance is 'b2bua2' and direction is 'sent' and not isRequest:
-                    if viaIsCucm:
-                        callFlowLocation = 'b2bua2in'
-                    else:
-                        callFlowLocation = 'b2bua2out'
-
-                elif b2buaInstance is 'b2bua2' and direction is 'rcvd' and fromCUCM:
-                    callFlowLocation = 'b2bua2in'
-
-                elif b2buaInstance is 'b2bua2' and direction is 'rcvd' and not fromCUCM:
-                    callFlowLocation = 'b2bua2out'
-
+            elif remoteIP == gCucmIP:
+                # This is a proxy log to or from CUCM. Check if we're sending to or receiving from CUCM or the Expressway-E
+                # Now we determine whether this is on the left side of the CUCM (cucmIn) or the right side of the
+                # CUCM (cucmOut). We can do this using the CallID because, unlike B2BUA, CUCM uses a diffferent
+                # CallID for each call leg. If the message traversed the B2BUA, we've already updated the callid
+                # map, but if not, we need to update it. INVITEs traverse the B2BUA but REGISTERs and SUBSCRIBEs
+                # do not.
+                if gCallIDMap.get(callid) is None:
+                    # Hasn't hit the b2bua yet so CUCM is initiating this CallID. See if this is out-of-dialog
+                    if not totag and isRequest and direction is 'rcvd':
+                        # CUCM is sending the message, let's see which phone IP its sending to
+                        if gPhone1IP is not None and gPhone1IP in reqUri:
+                            gCallIDMap[callid] = 'cucmIn'
+                            logId = 'cucmIn'
+                        else:
+                            gCallIDMap[callid] = 'cucmOut'
+                            logId = 'cucmOut'
+                elif gCallIDMap[callid] is 'b2bua1' or gCallIDMap[callid] is 'cucmIn' or gCallIDMap[callid] is 'proxy0':
+                    # The callid is on the left of CUCM
+                    logId = 'cucmIn'
                 else:
-                    print "*** parse_networkSipDebug: Unknown b2buaInstance value: b2buaInstance '%s', callid '%s', msgType '%s' at %s on line %s" % (b2buaInstance, callid, msgType, msgTypeTimestamp, msgTypeLinenum)
-                    print gCallIDMap
+                    # The callid is on the right of CUCM
+                    logId = 'cucmOut'
 
-            # Further refine our logId if we have a good value
-            if 'b2bua' in callFlowLocation:
-                logId = callFlowLocation
-            continue
+            elif localIP == gExpEIP:
+                # This is a proxy log on the Exp-E. We first need to figure out if its proxy0 or proxy5.
+                # Since the whole callflow is built relative to the first INVITE flowing left to right, we can't
+                # make any decisions until we get that first INVITE
+                if gCallIDMap.get(callid) is None:
+                    # We're processing the Exp-E log file so the callid map hasn't been built by the CUCM and
+                    # B2BUA logic above, which happens when processing the Exp-C log file.
+                    if gPhone1IP is None:
+                        # Can't make any assumptions yet, need to wait for the first INVITE.
+                        continue
+                    elif isRequest and direction is 'rcvd':
+                        if not fromCUCM and not fromB2BUA:
+                            # must be from the phone, but which one? look in the Contact header
+                            if gPhone1IP in contact:
+                                gCallIDMap[callid] = 'proxy0'
+                            else:
+                                gCallIDMap[callid] = 'proxy5'
+                        else:
+                            # must be from CUCM or B2BUA heading to the phone, look in the reqURI
+                            if gPhone1IP in reqUri:
+                                gCallIDMap[callid] = 'proxy0'
+                            else:
+                                gCallIDMap[callid] = 'proxy5'
+                if direction is 'rcvd':
+                    if gCallIDMap.get(callid) is 'proxy0':
+                        if fromProxy:
+                            # Must be from proxy1 on the Exp-C (e.g. 100 Trying which is point-to-point, not UA-to-UA)
+                            logId = 'proxy0out'
+                            srcEntity = 'Proxy1'
+                        elif not fromCUCM and not fromB2BUA:
+                            # Must be from the phone
+                            logId = 'proxy0in'
+                        else:
+                            # From either CUCM or the B2BUA. Some messages don't go though B2BUA
+                            logId = 'proxy0out'
+                            srcEntity = 'Proxy2' if fromCUCM else 'Proxy1'
+                    elif gCallIDMap.get(callid) is 'proxy5':
+                        if fromProxy:
+                            # Must be from proxy1 on the Exp-C (e.g. 100 Trying which is point-to-point, not UA-to-UA)
+                            logId = 'proxy5in'
+                            srcEntity = 'Proxy4'
+                        elif not fromCUCM and not fromB2BUA:
+                            # Must be from the phone
+                            logId = 'proxy5out'
+                        else:
+                            # From either CUCM or B2BUA
+                            logId = 'proxy5in'
+                            srcEntity = 'Proxy3' if fromCUCM else 'Proxy4'
+                elif direction is 'sent':
+                    if gCallIDMap.get(callid) is 'proxy0':
+                        if remoteIP == gExpCIP:
+                            logId = 'proxy0out'
+                        else:
+                            logId = 'proxy0in'
+                    elif gCallIDMap.get(callid) is 'proxy5':
+                        if remoteIP == gExpCIP:
+                            logId = 'proxy5in'
+                        else:
+                            logId = 'proxy5out'
+                continue
 
 
         if line == " a=inactive" or line == " a=sendonly" or line == " a=recvonly":
@@ -1388,17 +1425,14 @@ def parse_networkSipDebug(line, f):
         #     continue
         r = p_mline.search(line)
         if r is not None:
-            sdpPresent = True
             # Remember that this port was assigned to the endpoint. We'll use this when we have routing
             # connections from 'undef' and need to figure out which side of the call flow they go on.
             port = str(r['port'])
-            gPortAssignment[port] = ip
+            gPortAssignment[port] = remoteIP
 
             # This is the internal port assignment. Only assign the port the first time, that should be where the port
             # was allocated and sent in SDP. Subsequent appearances could be where it is received
-            if callFlowLocation is not '????':
-                if '.' in callFlowLocation:
-                    print "stop here!"
+            if 'b2bua' in callFlowLocation:
                 gB2buaPortAssignment[port] = callFlowLocation
 
             mline = '  m=%s %s %s' % (r['media'], port, r['mediatype'])
@@ -1409,8 +1443,8 @@ def parse_networkSipDebug(line, f):
         if r is not None:
             # Same as above but for the rtcp port
             port = str(r['port'])
-            gPortAssignment[port] = ip
-            if callFlowLocation is not '????':
+            gPortAssignment[port] = remoteIP
+            if 'b2bua' in callFlowLocation:
                 gB2buaPortAssignment[port] = callFlowLocation
             # Go ahead and include the whole line (with helpful indent), its not long
             aline = '   ' + line
@@ -1428,9 +1462,108 @@ def parse_networkSipDebug(line, f):
 
     # Add the req method or resp code that we saved above. Do this here so we have the updated logId so it gets
     # included in the right column in the output
-    gLogList.append(Log(logId, '', msgType, line, direction, msgTypeTimestamp, msgTypeLinenum))
+    gLogList.append(Log(logId, '', msgType, line, direction, msgTypeTimestamp, msgTypeLinenum, srcEntity))
 
     return True
+
+
+def calculateB2buaCallID(callFlowLocation, direction, routeIsCucm, callid):
+    global gCallIDMap
+    if direction is 'rcvd' and routeIsCucm:
+        # This is the first B2BUA becaue it is the first INVITE being sent to CUCM
+        callFlowLocation = 'b2bua1in'
+        gCallIDMap[callid] = 'b2bua1'
+    elif direction is 'rcvd' and not routeIsCucm:
+        # This is the second B2BUA because it is the first INVITE and not heading for the CUCM
+        callFlowLocation = 'b2bua2in'
+        gCallIDMap[callid] = 'b2bua2'
+    elif direction is 'sent' and routeIsCucm:
+        # This is the first B2BUA becaue it is the first INVITE being sent to CUCM
+        callFlowLocation = 'b2bua1out'
+        gCallIDMap[callid] = 'b2bua1'
+    elif direction is 'sent' and not routeIsCucm:
+        # This is the second B2BUA because it is the first INVITE and not heading for the CUCM
+        callFlowLocation = 'b2bua2out'
+        gCallIDMap[callid] = 'b2bua2'
+    return callFlowLocation
+
+def calculateB2buaCallFlowLocation(callFlowLocation, callid, direction, fromCUCM, isRequest, msgType,
+                                   msgTypeLinenum, msgTypeTimestamp, reqUri, routeIsCucm, totag, viaIsCucm):
+    global gCallIDMap, gCucmIP, gLastReqSent
+
+    # If there's no To tag and the message is a request, we know the message is traveling left to right in the call
+    # flow so we use this assumption to build the gCallIDMap that we'll use for subsequent messages.
+    if not totag and isRequest:
+        callFlowLocation = calculateB2buaCallID(callFlowLocation, direction, routeIsCucm, callid)
+    else:
+        # The message either has a To tag or its a response without a To tag (e.g. 100 Trying to the
+        # initial INVITE). Either way we should have the From tag in our map to learn which b2bua it is
+        # (1 or 2) and then figure out whether its the 'in' side or 'out' side. 'In' is always the left
+        # side of the b2bua in the flow, and 'out' is the right side.
+
+        # If a To tag is present, this is not a dialog-initiating request so use the callID mapping we
+        # created above when the dialog was initiated to figure out which b2bua we're on. From there we
+        # can figure out which side of the b2bua.
+        b2buaInstance = gCallIDMap.get(callid, '')
+
+        if b2buaInstance is 'b2bua1' and direction is 'sent' and isRequest:
+            if gCucmIP in reqUri:
+                callFlowLocation = 'b2bua1out'
+            else:
+                callFlowLocation = 'b2bua1in'
+
+        elif b2buaInstance is 'b2bua1' and direction is 'sent' and not isRequest:
+            if viaIsCucm:
+                callFlowLocation = 'b2bua1out'
+            else:
+                callFlowLocation = 'b2bua1in'
+
+        elif b2buaInstance is 'b2bua1' and direction is 'rcvd' and '100 Trying' in msgType:
+            # Handle 100 Trying which doesnt come from CUCM, it comes from the adjacent proxy
+            if gLastReqSent is not None:
+                callFlowLocation = gLastReqSent
+
+        elif b2buaInstance is 'b2bua1' and direction is 'rcvd' and fromCUCM:
+            callFlowLocation = 'b2bua1out'
+
+        elif b2buaInstance is 'b2bua1' and direction is 'rcvd' and not fromCUCM:
+            callFlowLocation = 'b2bua1in'
+
+
+
+        elif b2buaInstance is 'b2bua2' and direction is 'sent' and isRequest:
+            if gCucmIP in reqUri:
+                callFlowLocation = 'b2bua2in'
+            else:
+                callFlowLocation = 'b2bua2out'
+
+        elif b2buaInstance is 'b2bua2' and direction is 'sent' and not isRequest:
+            if viaIsCucm:
+                callFlowLocation = 'b2bua2in'
+            else:
+                callFlowLocation = 'b2bua2out'
+
+        elif b2buaInstance is 'b2bua2' and direction is 'rcvd' and '100 Trying' in msgType:
+            # Handle 100 Trying which doesnt come from CUCM, it comes from the adjacent proxy
+            if gLastReqSent is not None:
+                callFlowLocation = gLastReqSent
+
+        elif b2buaInstance is 'b2bua2' and direction is 'rcvd' and fromCUCM:
+            callFlowLocation = 'b2bua2in'
+
+        elif b2buaInstance is 'b2bua2' and direction is 'rcvd' and not fromCUCM:
+            callFlowLocation = 'b2bua2out'
+
+        else:
+            print "*** parse_networkSipDebug: Unknown b2buaInstance value: b2buaInstance '%s', callid '%s', msgType '%s' at %s on line %s" % (
+            b2buaInstance, callid, msgType, msgTypeTimestamp, msgTypeLinenum)
+            print gCallIDMap
+
+    # Need this for 100 Trying received by b2bua
+    if direction is 'sent' and isRequest:
+        gLastReqSent = callFlowLocation
+    return callFlowLocation
+
 
 def parse_networkSipReceivedReq(line):
     global gLogList
@@ -1847,11 +1980,11 @@ def getCallFlowSIP(proxyList):
     destPhoneIP = proxyList[5].toIP
     for log in gLogList:
         # search for the phone IPs, CUCM IP, or the this pointer in our proxy list
-        if log.this == origPhoneIP:
+        if log.this == origPhoneIP or log.this == 'proxy0in':
             msg = log.shortLog + {'rcvd': ' ->', 'sent': ' <-'}.get(log.direction, '')
             asciiRows.append([log.filename, log.linenum, log.timestamp, msg, '', '', '', '', '', '', '', '', '',
                               '', '', '', '', '', '', '', '', ''])
-        elif log.this == destPhoneIP:
+        elif log.this == destPhoneIP or log.this == 'proxy5out':
             msg = {'rcvd': '<- ', 'sent': '-> '}.get(log.direction, '   ') + log.shortLog
             asciiRows.append([log.filename, log.linenum, log.timestamp, '', '', '', '', '', '', '', '', '', '',
                               '', '', '', '', '', '', '', '', msg])
@@ -2354,16 +2487,22 @@ def initialize(expeFilename, expcFilename, turnFilename):
     global gManipulatorMap
     global gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn
     global gExpEIP, gExpCIP, gCucmIP, gExpCInternalIP
+    global gPortAssignment, gB2buaPortAssignment, gCallIDMap, gPhone1IP, gLastReqSent
 
+    gPacketRelayMapE = {}
+    gPacketRelayMapC = {}
+    gPacketRelayMapTurn = {}
+    gPortAssignment = {}
+    gB2buaPortAssignment = {}
+    gCallIDMap = {}
+    gLastReqSent = None
+    gPhone1IP = None
     routeMapE = {}
     routeMapC = {}
     routeMapTurn = {}
     mediaThreadMapE = {}
     mediaThreadMapC = {}
     mediaThreadMapTurn = {}
-    gPacketRelayMapE = {}
-    gPacketRelayMapC = {}
-    gPacketRelayMapTurn = {}
 
     # Table definitions
     gFsmTable = PrettyTable(['Timestamp', 'Source Specie', 'Source ID', 'Dest Specie', 'Dest ID', 'Msg', 'Next State'])
@@ -2685,43 +2824,82 @@ def buildSequenceDiagram(proxyList):
 
     origPhoneIP = proxyList[0].fromIP
     destPhoneIP = proxyList[5].toIP
-    phone1Entity     = 'Phone ' + origPhoneIP
-    phone2Entity     = 'Phone ' + destPhoneIP
-    proxy0InEntity   = 'Proxy0In'
-    proxy0OutEntity  = 'Proxy0Out'
-    proxy1InEntity   = 'Proxy1In'
-    proxy1OutEntity  = 'Proxy1Out'
+    phone1Entity     = 'Phone1: ' + origPhoneIP
+    phone2Entity     = 'Phone2: ' + destPhoneIP
+    proxy0Entity     = 'Proxy0'
+    proxy1Entity     = 'Proxy1'
     b2bua1Entity     = 'B2BUA1'
-    proxy2InEntity   = 'Proxy2In'
-    proxy2OutEntity  = 'Proxy2Out'
+    proxy2Entity     = 'Proxy2'
+    cucmEntity       = 'CUCM'
+    proxy3Entity     = 'Proxy3'
+    b2bua2Entity     = 'B2BUA2'
+    proxy4Entity     = 'Proxy4'
     proxy5Entity     = 'Proxy5'
-    # sd = SequenceDiagram(['Timestamp', phone1Entity, 'TURN1', 'ExpE Proxy0 In', 'ExpE Proxy0 Out', 'ExpC Proxy1 In',
-    #                       'ExpC Proxy1 Out', 'B2BUA1', 'ExpC Proxy2 In', 'ExpC Proxy2 Out', 'CUCM',
-    #                       'ExpC Proxy3 In', 'ExpC Proxy3 Out', 'B2BUA2', 'ExpC Proxy4 In', 'ExpC Proxy4 Out',
-    #                       'ExpE Proxy5 In', 'ExpE Proxy5 Out', 'TURN2', phone2Entity])
-    sd = SequenceDiagram([phone1Entity, proxy0InEntity, proxy0OutEntity, proxy1InEntity, proxy1OutEntity,
-                          b2bua1Entity, proxy5Entity, phone2Entity])
+    sd = SequenceDiagram([phone1Entity, proxy0Entity, proxy1Entity, b2bua1Entity, proxy2Entity, cucmEntity, proxy3Entity, b2bua2Entity, proxy4Entity, proxy5Entity, phone2Entity])
 
     for log in sortedLogs:
         # search for the phone IPs, CUCM IP, or the this pointer in our proxy list
         if log.this == origPhoneIP:
             if log.direction == 'rcvd':
-                sd.action(phone1Entity, proxy0InEntity, log.shortLog, log.filename, log.linenum)
+                sd.action(phone1Entity, proxy0Entity, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(proxy0InEntity, phone1Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy0Entity, phone1Entity, log.shortLog, log.filename, log.linenum)
         elif log.this == destPhoneIP:
             if log.direction == 'rcvd':
                 sd.action(phone2Entity, proxy5Entity, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
                 sd.action(proxy5Entity, phone2Entity, log.shortLog, log.filename, log.linenum)
-        elif log.this == proxyList[0].inboundLeg:
-            sd.event(entity1=proxy0InEntity, text=log.longLog, filename=log.filename, linenum=log.linenum)
-        elif log.this == proxyList[0].outboundLeg:
-            sd.event(entity1=proxy0OutEntity, text=log.longLog, filename=log.filename, linenum=log.linenum)
-        elif log.this == proxyList[1].inboundLeg:
-            sd.event(entity1=proxy1InEntity, text=log.longLog, filename=log.filename, linenum=log.linenum)
-        elif log.this == proxyList[1].outboundLeg:
-            sd.event(entity1=proxy1OutEntity, text=log.longLog, filename=log.filename, linenum=log.linenum)
+        elif log.this == 'b2bua1in':
+            if log.direction == 'rcvd':
+                sd.action(proxy1Entity, b2bua1Entity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(b2bua1Entity, proxy1Entity, log.shortLog, log.filename, log.linenum)
+        elif log.this == 'b2bua1out':
+            if log.direction == 'rcvd':
+                sd.action(proxy2Entity, b2bua1Entity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(b2bua1Entity, proxy2Entity, log.shortLog, log.filename, log.linenum)
+        elif log.this == 'b2bua2in':
+            if log.direction == 'rcvd':
+                sd.action(proxy3Entity, b2bua2Entity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(b2bua2Entity, proxy3Entity, log.shortLog, log.filename, log.linenum)
+        elif log.this == 'b2bua2out':
+            if log.direction == 'rcvd':
+                sd.action(proxy4Entity, b2bua2Entity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(b2bua2Entity, proxy4Entity, log.shortLog, log.filename, log.linenum)
+        elif log.this == 'cucmIn':
+            if log.direction == 'sent':
+                sd.action(proxy2Entity, cucmEntity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'rcvd':
+                sd.action(cucmEntity, proxy2Entity, log.shortLog, log.filename, log.linenum)
+        elif log.this == 'cucmOut':
+            if log.direction == 'sent':
+                sd.action(proxy3Entity, cucmEntity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'rcvd':
+                sd.action(cucmEntity, proxy3Entity, log.shortLog, log.filename, log.linenum)
+
+        elif log.this == 'proxy0in':
+            if log.direction == 'rcvd':
+                sd.action(phone1Entity, proxy0Entity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(proxy0Entity, phone1Entity, log.shortLog, log.filename, log.linenum)
+        elif log.this == 'proxy0out':
+            if log.direction == 'rcvd':
+                sd.action(log.srcEntity, proxy0Entity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(proxy0Entity, proxy1Entity, log.shortLog, log.filename, log.linenum)
+        elif log.this == 'proxy5in':
+            if log.direction == 'rcvd':
+                sd.action(log.srcEntity, proxy5Entity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(proxy5Entity, proxy4Entity, log.shortLog, log.filename, log.linenum)
+        elif log.this == 'proxy5out':
+            if log.direction == 'rcvd':
+                sd.action(phone2Entity, proxy5Entity, log.shortLog, log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(proxy5Entity, phone2Entity, log.shortLog, log.filename, log.linenum)
 
     return sd.get_html()
 
@@ -2763,7 +2941,7 @@ def getTestHtml():
 
 
 def save_globals():
-    global gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn
+    global gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn, gPortAssignment, gB2buaPortAssignment
     with open("proxy.dat", "wb") as f:
         pickle.dump(gProxyList, f)
     with open("logs.dat", "wb") as f:
@@ -2774,9 +2952,11 @@ def save_globals():
         pickle.dump([gRouteMapE, gRouteMapC], f)
     with open("packetrelay.dat", "wb") as f:
         pickle.dump([gPacketRelayMapE, gPacketRelayMapE, gPacketRelayMapTurn], f)
+    with open("portassignments.dat", "wb") as f:
+        pickle.dump([gPortAssignment, gB2buaPortAssignment], f)
 
 def load_globals():
-    global gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn
+    global gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn, gPortAssignment, gB2buaPortAssignment
     try:
         with open("proxy.dat") as f:
             gProxyList = pickle.load(f)
@@ -2788,6 +2968,8 @@ def load_globals():
             gRouteMapE, gRouteMapC = pickle.load(f)
         with open("packetrelay.dat") as f:
             gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn = pickle.load(f)
+        with open("portassignments.dat") as f:
+            gPortAssignment, gB2buaPortAssignment = pickle.load(f)
     except:
         print "Error reading files"
 
@@ -2870,6 +3052,7 @@ def upload_file():
         print "MSG TABLE"
         print asciiMsgTable.get_string(sortby="Timestamp")
 
+        save_globals()
         listOfRows = getListOfMsgFlowRows(gProxyList, gRouteMapE, gRouteMapC)
         table = MsgFlowTable(listOfRows, html_attrs={'frame': 'border', 'rules': 'cols'})
         htmlMsgTable = Markup(table.__html__())
