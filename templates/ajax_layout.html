@@ -53,6 +53,12 @@
 	button {
 		line-height:	normal;
 	}
+	legend {
+		font-size: 1em;
+	}
+	fieldset {
+	    display: inline-block;
+	}
 
 	/*
 	 *	CUSTOMIZE LAYOUT SETTINGS
@@ -121,6 +127,30 @@
             $('#get_packet_relay_info_turn').bind('click', function()
             {
                 $.get('/get_packet_relay_info_turn', function(data) {
+                    var w = window.open();
+                    $(w.document.body).html(data)
+            	});
+          	});
+
+            $('#get_proxy_legs_e').bind('click', function()
+            {
+                $.get('/get_proxy_legs_e', function(data) {
+                    var w = window.open();
+                    $(w.document.body).html(data)
+            	});
+          	});
+
+            $('#get_proxy_legs_c').bind('click', function()
+            {
+                $.get('/get_proxy_legs_c', function(data) {
+                    var w = window.open();
+                    $(w.document.body).html(data)
+            	});
+          	});
+
+            $('#get_proxy_table').bind('click', function()
+            {
+                $.get('/get_proxy_table', function(data) {
                     var w = window.open();
                     $(w.document.body).html(data)
             	});
@@ -209,13 +239,27 @@
 <body>
 
 <div class="ui-layout-north">
-	<button id="get_packet_relay_info_e">Get Packet Relay Info on E</button>
-	<button id="get_packet_relay_info_c">Get Packet Relay Info on C</button>
-	<button id="get_packet_relay_info_turn">Get Packet Relay Info on TURN</button>
-	<button id="get_ascii_table">Export to ASCII</button>
-	<button id="save_data">Save Data</button>
-	<button id="load_table">Load Table</button>
-	<button id="load_sequence_diagram">Load Sequence Diagram</button>
+	<div>
+		<fieldset>
+			<legend>Packet Relay Data</legend>
+			<button id="get_packet_relay_info_e">Expressway-E</button>
+			<button id="get_packet_relay_info_c">Expressway-C</button>
+			<button id="get_packet_relay_info_turn">TURN</button>
+		</fieldset>
+		<fieldset>
+			<legend>Proxy Info</legend>
+			<button id="get_proxy_legs_e">Expressway-E Legs</button>
+			<button id="get_proxy_legs_c">Expressway-C Legs</button>
+			<button id="get_proxy_table">All Proxies</button>
+		</fieldset>
+		<fieldset>
+			<legend>Display Options</legend>
+			<button id="load_table">Table</button>
+			<button id="load_sequence_diagram">Sequence Diagram</button>
+			<button id="get_ascii_table">ASCII</button>
+		</fieldset>
+		<button id="save_data">Save Data</button>
+	</div>
 </div>
 
 <div class="ui-layout-center">
