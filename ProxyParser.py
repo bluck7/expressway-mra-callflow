@@ -546,6 +546,12 @@ class ProxyLeg:
         self.order = ProxyLeg.order
         ProxyLeg.order += 1
 
+    def session(self):
+        if self.sessionID is None or self.remoteSessionID is None:
+            return ''
+        else:
+            return self.sessionID + self.remoteSessionID
+
 class Proxy:
     def __init__(self, num=0, inboundLeg='', outboundLeg='',
                  inboundFsm='', outboundFsm='', fromIP='', toIP='',
@@ -564,10 +570,16 @@ class Proxy:
 
 class Call:
     def __init__(self, sessionId=None, remoteSessionId=None):
-        self.sessionId = sessionId
-        self.remoteSessionId = remoteSessionId
+        self.sessionID = sessionId
+        self.remoteSessionID = remoteSessionId
         self.proxyList = [Proxy() for i in range(6)]
-        
+
+    def session(self):
+        if self.sessionID is None or self.remoteSessionID is None:
+            return ''
+        else:
+            return self.sessionID + self.remoteSessionID
+
 # INBOUND LEGS
 # Here's the sequence of parsers relative to the FSM message execution:
 #
@@ -1951,34 +1963,37 @@ def buildProxyListForExpENoIP(callList, proxyLegMap):
 
 
 
-def buildProxyListForExpC(proxyList, proxyLegMap):
+def buildProxyListForExpC(callList, proxyLegMap):
     global gExpEIP, gExpCIP, gCucmIP
     # Join the proxy legs and construct the sequence of proxies
-    for inboundLeg in proxyLegMap.values():
-        outboundLeg = proxyLegMap[inboundLeg.otherLeg]
-        if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpEIP:
-            proxyList[1] = Proxy(1, inboundLeg.this, outboundLeg.this,
-                                 inboundLeg.individNum, outboundLeg.individNum,
-                                 inboundLeg.fromIP, outboundLeg.toIP,
-                                 inboundLeg.fromNettle, outboundLeg.toNettle)
+    for call in callList:
+        for inboundLeg in (sorted(proxyLegMap.values(), key=operator.attrgetter('order'))):
+            # Is this leg part of the current call?
+            if inboundLeg.session() == call.session():
+                outboundLeg = proxyLegMap[inboundLeg.otherLeg]
+                if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpEIP:
+                    call.proxyList[1] = Proxy(1, inboundLeg.this, outboundLeg.this,
+                                              inboundLeg.individNum, outboundLeg.individNum,
+                                              inboundLeg.fromIP, outboundLeg.toIP,
+                                              inboundLeg.fromNettle, outboundLeg.toNettle)
 
-        if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpCIP and outboundLeg.toIP == gCucmIP:
-            proxyList[2] = Proxy(2, inboundLeg.this, outboundLeg.this,
-                                 inboundLeg.individNum, outboundLeg.individNum,
-                                 inboundLeg.fromIP, outboundLeg.toIP,
-                                 inboundLeg.fromNettle, outboundLeg.toNettle)
+                if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpCIP and outboundLeg.toIP == gCucmIP:
+                    call.proxyList[2] = Proxy(2, inboundLeg.this, outboundLeg.this,
+                                              inboundLeg.individNum, outboundLeg.individNum,
+                                              inboundLeg.fromIP, outboundLeg.toIP,
+                                              inboundLeg.fromNettle, outboundLeg.toNettle)
 
-        if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gCucmIP:
-            proxyList[3] = Proxy(3, inboundLeg.this, outboundLeg.this,
-                                 inboundLeg.individNum, outboundLeg.individNum,
-                                 inboundLeg.fromIP, outboundLeg.toIP,
-                                 inboundLeg.fromNettle, outboundLeg.toNettle)
+                if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gCucmIP:
+                    call.proxyList[3] = Proxy(3, inboundLeg.this, outboundLeg.this,
+                                              inboundLeg.individNum, outboundLeg.individNum,
+                                              inboundLeg.fromIP, outboundLeg.toIP,
+                                              inboundLeg.fromNettle, outboundLeg.toNettle)
 
-        if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpCIP and outboundLeg.toIP == gExpEIP:
-            proxyList[4] = Proxy(4, inboundLeg.this, outboundLeg.this,
-                                 inboundLeg.individNum, outboundLeg.individNum,
-                                 inboundLeg.fromIP, outboundLeg.toIP,
-                                 inboundLeg.fromNettle, outboundLeg.toNettle)
+                if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpCIP and outboundLeg.toIP == gExpEIP:
+                    call.proxyList[4] = Proxy(4, inboundLeg.this, outboundLeg.this,
+                                              inboundLeg.individNum, outboundLeg.individNum,
+                                              inboundLeg.fromIP, outboundLeg.toIP,
+                                              inboundLeg.fromNettle, outboundLeg.toNettle)
 
 
 def getProxyTable(proxyList):
@@ -2636,7 +2651,7 @@ def initialize(expeFilename, expcFilename, turnFilename):
             print ptE.get_string(sortby="Timestamp")
             print "Size: " + str(len(gPacketRelayMapC))
 
-        buildProxyListForExpC(gCallList[0].proxyList, gProxyLegMapC)
+        buildProxyListForExpC(gCallList, gProxyLegMapC)
 
     if turnFilename is not None:
         parseFile(turnFilename, routeMapTurn, mediaThreadMapTurn, gPacketRelayMapTurn)
@@ -3174,7 +3189,7 @@ def get_proxy_table():
     global gCallList
     data = "CALLS\n"
     for call in gCallList:
-        data += "\nSessionID: %s  RemoteSessionID: %s\n" % (call.sessionId, call.remoteSessionId)
+        data += "\nSessionID: %s  RemoteSessionID: %s\n" % (call.sessionID, call.remoteSessionID)
         proxyTable = getProxyTable(call.proxyList)
         data += proxyTable.get_string()
         data += "\n"
