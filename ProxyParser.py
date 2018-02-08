@@ -1440,19 +1440,31 @@ def parse_networkSipDebug(line, f):
                             srcEntity = 'Proxy1'
                         elif not fromCUCM and not fromB2BUA:
                             # Must be from the phone
-                            logId = 'proxy0in'
+                            # logId = 'proxy0in'
+
+                            # Instead of recording this relative to the proxy, we're going to record it with the phone
+                            # IP because that allows multiple different phones to be shown in the call flow (e.g. transfer case).
+                            # Note that the logId is initialized with the remoteIP above but setting it here explicitly to make it clear
+                            # why were using the phone IP.
+                            logId = remoteIP
                         else:
                             # From either CUCM or the B2BUA. Some messages don't go though B2BUA
                             logId = 'proxy0out'
                             srcEntity = 'Proxy2' if fromCUCM else 'Proxy1'
                     elif gCallIDMap.get(callid) is 'proxy5':
                         if fromProxy:
-                            # Must be from proxy1 on the Exp-C (e.g. 100 Trying which is point-to-point, not UA-to-UA)
+                            # Must be from proxy4 on the Exp-C (e.g. 100 Trying which is point-to-point, not UA-to-UA)
                             logId = 'proxy5in'
                             srcEntity = 'Proxy4'
                         elif not fromCUCM and not fromB2BUA:
                             # Must be from the phone
-                            logId = 'proxy5out'
+                            # logId = 'proxy5out'
+
+                            # Instead of recording this relative to the proxy, we're going to record it with the phone
+                            # IP because that allows multiple different phones to be shown in the call flow (e.g. transfer case).
+                            # Note that the logId is initialized with the remoteIP above but setting it here explicitly to make it clear
+                            # why were using the phone IP.
+                            logId = remoteIP
                         else:
                             # From either CUCM or B2BUA
                             logId = 'proxy5in'
@@ -1462,12 +1474,14 @@ def parse_networkSipDebug(line, f):
                         if remoteIP == gExpCIP:
                             logId = 'proxy0out'
                         else:
-                            logId = 'proxy0in'
+                            #logId = 'proxy0in'
+                            logId = remoteIP
                     elif gCallIDMap.get(callid) is 'proxy5':
                         if remoteIP == gExpCIP:
                             logId = 'proxy5in'
                         else:
-                            logId = 'proxy5out'
+                            #logId = 'proxy5out'
+                            logId = remoteIP
                 continue
 
 
@@ -2887,15 +2901,20 @@ class SequenceDiagram(object):
         '''
 
 def buildSequenceDiagram(proxyList):
-    global gLogList
+    global gLogList, gCallList
 
     # Sort the log list
     sortedLogs = sorted(gLogList, key=lambda x: getattr(x, 'timestamp'))
 
+    # Find out how many endpoints are involved across all of the calls
+    phone1set = set()
+    phone2set = set()
+    for call in gCallList:
+        phone1set.add(call.proxyList[0].fromIP)
+        phone2set.add(call.proxyList[5].toIP)
+
     origPhoneIP = proxyList[0].fromIP
     destPhoneIP = proxyList[5].toIP
-    phone1Entity     = 'Phone1: ' + origPhoneIP
-    phone2Entity     = 'Phone2: ' + destPhoneIP
     proxy0Entity     = 'Proxy0'
     proxy1Entity     = 'Proxy1'
     b2bua1Entity     = 'B2BUA1'
@@ -2905,20 +2924,24 @@ def buildSequenceDiagram(proxyList):
     b2bua2Entity     = 'B2BUA2'
     proxy4Entity     = 'Proxy4'
     proxy5Entity     = 'Proxy5'
-    sd = SequenceDiagram([phone1Entity, proxy0Entity, proxy1Entity, b2bua1Entity, proxy2Entity, cucmEntity, proxy3Entity, b2bua2Entity, proxy4Entity, proxy5Entity, phone2Entity])
+    entityList = [proxy0Entity, proxy1Entity, b2bua1Entity, proxy2Entity, cucmEntity, proxy3Entity, b2bua2Entity, proxy4Entity, proxy5Entity]
+    sdEntities = list(phone1set)
+    sdEntities.extend(entityList)
+    sdEntities.extend(list(phone2set))
+    sd = SequenceDiagram(sdEntities)
 
     for log in sortedLogs:
         # search for the phone IPs, CUCM IP, or the this pointer in our proxy list
-        if log.this == origPhoneIP:
+        if log.this in phone1set:
             if log.direction == 'rcvd':
-                sd.action(phone1Entity, proxy0Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(log.this, proxy0Entity, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(proxy0Entity, phone1Entity, log.shortLog, log.filename, log.linenum)
-        elif log.this == destPhoneIP:
+                sd.action(proxy0Entity, log.this, log.shortLog, log.filename, log.linenum)
+        elif log.this in phone2set:
             if log.direction == 'rcvd':
-                sd.action(phone2Entity, proxy5Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(log.this, proxy5Entity, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(proxy5Entity, phone2Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy5Entity, log.this, log.shortLog, log.filename, log.linenum)
         elif log.this == 'b2bua1in':
             if log.direction == 'rcvd':
                 sd.action(proxy1Entity, b2bua1Entity, log.shortLog, log.filename, log.linenum)
@@ -2950,11 +2973,11 @@ def buildSequenceDiagram(proxyList):
             elif log.direction == 'rcvd':
                 sd.action(cucmEntity, proxy3Entity, log.shortLog, log.filename, log.linenum)
 
-        elif log.this == 'proxy0in':
-            if log.direction == 'rcvd':
-                sd.action(phone1Entity, proxy0Entity, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy0Entity, phone1Entity, log.shortLog, log.filename, log.linenum)
+        # elif log.this == 'proxy0in':
+        #     if log.direction == 'rcvd':
+        #         sd.action(phone1Entity, proxy0Entity, log.shortLog, log.filename, log.linenum)
+        #     elif log.direction == 'sent':
+        #         sd.action(proxy0Entity, phone1Entity, log.shortLog, log.filename, log.linenum)
         elif log.this == 'proxy0out':
             if log.direction == 'rcvd':
                 sd.action(log.srcEntity, proxy0Entity, log.shortLog, log.filename, log.linenum)
@@ -2965,11 +2988,11 @@ def buildSequenceDiagram(proxyList):
                 sd.action(log.srcEntity, proxy5Entity, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
                 sd.action(proxy5Entity, proxy4Entity, log.shortLog, log.filename, log.linenum)
-        elif log.this == 'proxy5out':
-            if log.direction == 'rcvd':
-                sd.action(phone2Entity, proxy5Entity, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy5Entity, phone2Entity, log.shortLog, log.filename, log.linenum)
+        # elif log.this == 'proxy5out':
+        #     if log.direction == 'rcvd':
+        #         sd.action(phone2Entity, proxy5Entity, log.shortLog, log.filename, log.linenum)
+        #     elif log.direction == 'sent':
+        #         sd.action(proxy5Entity, phone2Entity, log.shortLog, log.filename, log.linenum)
 
     return sd.get_html()
 
@@ -3127,10 +3150,12 @@ def upload_file():
         # print asciiMsgTable.get_string(sortby="Timestamp")
 
         save_globals()
-        listOfRows = getListOfMsgFlowRows(gProxyList, gRouteMapE, gRouteMapC)
-        table = MsgFlowTable(listOfRows, html_attrs={'frame': 'border', 'rules': 'cols'})
-        htmlMsgTable = Markup(table.__html__())
-        return render_template('ajax_layout.html', flow=htmlMsgTable)
+        # listOfRows = getListOfMsgFlowRows(gProxyList, gRouteMapE, gRouteMapC)
+        # table = MsgFlowTable(listOfRows, html_attrs={'frame': 'border', 'rules': 'cols'})
+        # htmlMsgTable = Markup(table.__html__())
+        # return render_template('ajax_layout.html', flow=htmlMsgTable)
+        html = buildSequenceDiagram(gProxyList)
+        return render_template('ajax_layout.html', flow=Markup(html))
 
 @app.route('/check_log_levels')
 def check_log_levels():
@@ -3231,17 +3256,6 @@ def load_sequence_diagram():
     load_globals()
     html = buildSequenceDiagram(gProxyList)
     return html
-
-@app.route('/load_main_with_table')
-def load_main_with_table():
-    # Render the main page with a saved table. Only one table can be saved at the moment
-    global gProxyList
-    load_globals()
-
-    listOfRows = getListOfMsgFlowRows(gProxyList)
-    table = MsgFlowTable(listOfRows, html_attrs={'frame': 'border', 'rules': 'cols'})
-    mtable = Markup(table.__html__())
-    return render_template('ajax_layout.html', flow=mtable)
 
 @app.route('/load_main_empty')
 def load_main_empty():

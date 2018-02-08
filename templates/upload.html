@@ -86,11 +86,11 @@
 
         $(function()
         {
-            $('#check_log_levels').bind('click', function()
-            {
-                $.get('/check_log_levels', function(data) {
-                    alert(data)
-                });
+            $('#exp_e_logs').click(function() {
+                $('#exp_e_logger').toggle()
+            });
+            $('#exp_c_logs').click(function() {
+                $('#exp_c_logger').toggle()
             });
         });
 
@@ -157,21 +157,52 @@
             <input type = "submit"/>
         </form>
         <p>OR</p>
-        <form action="/load_main_with_table">
-            <input type="submit" value="Load Prebuilt Table" />
-        </form>
-        <p>OR</p>
         <form action="/load_main_empty">
             <input type="submit" value="Load Empty Page" />
         </form>
         <fieldset style="margin-top: 40px">
             <legend>Log settings on the Expressways</legend>
             <div style="margin-left: 5px">
-                <p>Use the buttons below to set the logging levels needed for this analyzer.</p>
+                <p>Use the buttons below to get the CLI commands to set the logging levels needed for this analyzer.</p>
                 <div style="margin-left: 10px">
-                    <button id='check_log_levels'>Check Log Levels</button>
-                    <button id='set_log_levels'>Set Log Levels</button>
-                    <button id='clear_log_levels'>Clear Log Levels</button>
+                    <button id='exp_e_logs'>Expressway-E Logger Config</button>
+                    <button id='exp_c_logs'>Expressway-C Logger Config</button>
+                </div>
+                <div id="exp_e_logger" style="display:none;">
+                    <p>Expressway-E Logger Commands</p>
+                    <pre>
+    xConfiguration Logger Developer developer.management.trafficserver Level: DEBUG
+    xConfiguration Logger Developer developer.media Level: DEBUG
+    xConfiguration Logger Developer developer.mediasessionmgr Level: DEBUG
+    xConfiguration Logger Developer developer.mediasessionmgr.mediasession Level: DEBUG
+    xConfiguration Logger Developer developer.mediarouting.core Level: TRACE
+    xConfiguration Logger Developer developer.sip.leg Level: DEBUG
+    xConfiguration Logger Network network.mediarouting Level: DEBUG
+    xConfiguration Logger Network network.sip Level: DEBUG
+    xConfiguration Logger Network network.stun Level: DEBUG
+    xConfiguration Logger Developer developer.fsm.sipmsgdsp Level: TRACE
+    xConfiguration Logger Developer developer.fsm.sipproxylegfsm Level: TRACE
+    xConfiguration Logger Developer developer.fsm.sipproxymsgdspfsm Level: TRACE
+                    </pre>
+                </div>
+                <div id="exp_c_logger" style="display:none;">
+                    <p>Expressway-C Logger Commands</p>
+                    <pre>
+    xConfiguration Logger Developer developer.applicationmanager.sip2sipapplication Level: DEBUG
+    xConfiguration Logger Developer developer.fsm.sipmsgdsp Level: TRACE
+    xConfiguration Logger Developer developer.fsm.sipproxylegfsm Level: TRACE
+    xConfiguration Logger Developer developer.fsm.sipproxymsgdspfsm Level: TRACE
+    xConfiguration Logger Developer developer.management.trafficserver Level: DEBUG
+    xConfiguration Logger Developer developer.media Level: DEBUG
+    xConfiguration Logger Developer developer.media.sessionmanager Level: DEBUG
+    xConfiguration Logger Developer developer.media.sessionmanager.mediasession Level: DEBUG
+    xConfiguration Logger Developer developer.mediarouting.core Level: TRACE
+    xConfiguration Logger Developer developer.mediarouting.manager Level: DEBUG
+    xConfiguration Logger Developer developer.mediasessionmgr Level: DEBUG
+    xConfiguration Logger Developer developer.sip.leg Level: DEBUG
+    xConfiguration Logger Network network.mediarouting Level: DEBUG
+    xConfiguration Logger Network network.sip Level: DEBUG
+                    </pre>
                 </div>
             </div>
         </fieldset>
