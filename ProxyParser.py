@@ -23,6 +23,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 gProxyLegMap = {}
 gProxyLegMapE = {}
+gProxyLegMapE2 = {}
 gProxyLegMapC = {}
 gCurrentThisInstance = {}
 gFsmTable = None
@@ -30,7 +31,7 @@ gLogList = []
 gManipulatorMap = {}
 gPacketRelayMapE = {}
 gPacketRelayMapC = {}
-gPacketRelayMapTurn = {}
+gPacketRelayMapE2 = {}
 gExpEIP, gExpCIP, gCucmIP, gExpCInternalIP = None, None, None, None
 gRouteMapE, gRouteMapC = None, None
 gProxyList = None
@@ -580,6 +581,22 @@ class Call:
         else:
             return self.sessionID + self.remoteSessionID
 
+    def addProxy(self, index, inboundLeg, outboundLeg):
+        self.proxyList[index] = Proxy(index, inboundLeg.this,       outboundLeg.this,
+                                             inboundLeg.individNum, outboundLeg.individNum,
+                                             inboundLeg.fromIP,     outboundLeg.toIP,
+                                             inboundLeg.fromNettle, outboundLeg.toNettle)
+
+def getCall(sessionID, remoteSessionID):
+    global gCallList
+    for call in gCallList:
+        if call.session() == sessionID + remoteSessionID:
+            return call
+    call = Call(sessionID, remoteSessionID)
+    gCallList.append(call)
+    return call
+
+
 # INBOUND LEGS
 # Here's the sequence of parsers relative to the FSM message execution:
 #
@@ -1019,6 +1036,17 @@ def parse_getRequiredLicensingType(line):
                 proxyLeg.sessionID = gCallIDtoSessionID.get(proxyLeg.callID)
             if proxyLeg.remoteSessionID is None:
                 proxyLeg.remoteSessionID = gCallIDtoRemoteSessionID.get(proxyLeg.callID)
+
+            # Other leg may not have encountered this log, update as well
+            if proxyLeg.otherLeg is not None:
+                otherLeg = gProxyLegMap.get(proxyLeg.otherLeg)
+                if otherLeg is not None:
+                    if otherLeg.callID is None:
+                        otherLeg.callID = proxyLeg.callID
+                    if otherLeg.sessionID is None:
+                        otherLeg.sessionID = proxyLeg.sessionID
+                    if otherLeg.remoteSessionID is None:
+                        otherLeg.remoteSessionID = proxyLeg.remoteSessionID
         return True
 
 # ====================================================================================================================
@@ -1341,11 +1369,11 @@ def parse_networkSipDebug(line, f):
             #msgType += " (CSeq " + line.split()[1] + ")"
 
         # Look for Call-Info headers to see if this is a HOLD or RESUME message
-        if line == " Call-Info: <urn:x-cisco-remotecc:hold>":
+        if line == "Call-Info: <urn:x-cisco-remotecc:hold>":
             operation = "  *** HOLD ***"
             gLogList.append(Log(logId, timestamp, operation, line))
             continue
-        if line == " Call-Info: <urn:x-cisco-remotecc:resume>":
+        if line == "Call-Info: <urn:x-cisco-remotecc:resume>":
             operation = "  *** RESUME ***"
             gLogList.append(Log(logId, timestamp, operation, line))
             continue
@@ -1409,7 +1437,7 @@ def parse_networkSipDebug(line, f):
                     # The callid is on the right of CUCM
                     logId = 'cucmOut'
 
-            elif localIP == gExpEIP:
+            elif localIP in gExpEIP:
                 # This is a proxy log on the Exp-E. We first need to figure out if its proxy0 or proxy5.
                 # Since the whole callflow is built relative to the first INVITE flowing left to right, we can't
                 # make any decisions until we get that first INVITE
@@ -1417,7 +1445,8 @@ def parse_networkSipDebug(line, f):
                     # We're processing the Exp-E log file so the callid map hasn't been built by the CUCM and
                     # B2BUA logic above, which happens when processing the Exp-C log file.
                     if gPhone1IP is None:
-                        # Can't make any assumptions yet, need to wait for the first INVITE.
+                        # Can't make any assumptions yet, need to wait for the first INVITE because we want the
+                        # originating endpoint to be on the left of the call flow.
                         continue
                     elif isRequest and direction is 'rcvd':
                         if not fromCUCM and not fromB2BUA:
@@ -1435,7 +1464,10 @@ def parse_networkSipDebug(line, f):
                 if direction is 'rcvd':
                     if gCallIDMap.get(callid) is 'proxy0':
                         if fromProxy:
-                            # Must be from proxy1 on the Exp-C (e.g. 100 Trying which is point-to-point, not UA-to-UA)
+                            # The Server or User-Agent header indicates Proxy instead of phone, B2BUA or CUCM. Since most SIP
+                            # messages originate from a UA rather than a proxy, this is likely a 100 Trying which does
+                            # originate from the proxy. In any case, it must be from proxy1 which is the only adjacent
+                            # proxy to proxy0 (the other adjacent entity is the phone itself).
                             logId = 'proxy0out'
                             srcEntity = 'Proxy1'
                         elif not fromCUCM and not fromB2BUA:
@@ -1485,8 +1517,8 @@ def parse_networkSipDebug(line, f):
                 continue
 
 
-        if line == " a=inactive" or line == " a=sendonly" or line == " a=recvonly":
-            operation = ' ' + line
+        if line == "a=inactive" or line == "a=sendonly" or line == "a=recvonly":
+            operation = '  ' + line
             gLogList.append(Log(logId, timestamp, operation, line))
             continue
         if ";apparent" in line:
@@ -1945,70 +1977,70 @@ def buildProxyListForExpENoIP(callList, proxyLegMap):
     # This is the same as the method above except it tries to identify the proxies of interest without starting
     # with IP addresses. It does this by chosing the proxy legs by the order they were created. Thus, we need to
     # sort the dictionary by order
-    firstInboundLeg = None
-    firstOutboundLeg = None
+    global gExpCIP
+
     for leg in (sorted(proxyLegMap.values(), key=operator.attrgetter('order'))):
         otherLeg = proxyLegMap.get(leg.otherLeg)
         if otherLeg is None:
             # Ignore proxy legs that don't have a mate
             continue
+        if leg.sessionID is None or otherLeg.sessionID is None:
+            continue
+
+        # Work with inbound INVITE legs only, will get the associated outbound leg
         if leg.isInvite and leg.direction == 'Inbound':
-            if firstInboundLeg is None:
-                firstInboundLeg = leg
-                firstOutboundLeg = otherLeg
-            elif leg.sessionID + leg.remoteSessionID == firstInboundLeg.sessionID + firstInboundLeg.remoteSessionID:
-                secondInboundLeg = leg
-                secondOutboundLeg = otherLeg
-                call = Call(leg.sessionID, leg.remoteSessionID)
-                # Proxies are numerically indexed by the order they are created. Each proxy includes both inbound and outbound legs.
-                call.proxyList[0] = Proxy(0, firstInboundLeg.this, firstOutboundLeg.this,
-                                          firstInboundLeg.individNum, firstOutboundLeg.individNum,
-                                          firstInboundLeg.fromIP, firstOutboundLeg.toIP,
-                                          firstInboundLeg.fromNettle, firstOutboundLeg.toNettle)
-                call.proxyList[5] = Proxy(5, secondInboundLeg.this, secondOutboundLeg.this,
-                                          secondInboundLeg.individNum, secondOutboundLeg.individNum,
-                                          secondInboundLeg.fromIP, secondOutboundLeg.toIP,
-                                          secondInboundLeg.fromNettle, secondOutboundLeg.toNettle)
-                callList.append(call)
-                firstInboundLeg = None
-                firstOutboundLeg = None
+            # Need to handle the case where one Exp-E has proxy0 and another Exp-E has proxy5. Check if this leg is
+            # coming from ExpC in which case it would be proxy5
+            if leg.fromIP == gExpCIP:
+                call = getCall(leg.sessionID, leg.remoteSessionID)
+                call.addProxy(5, leg, otherLeg)
             else:
-                print "*** : Second inbound leg doesn't have the same sessionID"
+                call = getCall(leg.sessionID, leg.remoteSessionID)
+                call.addProxy(0, leg, otherLeg)
 
 
 
 def buildProxyListForExpC(callList, proxyLegMap):
     global gExpEIP, gExpCIP, gCucmIP
     # Join the proxy legs and construct the sequence of proxies
-    for call in callList:
-        for inboundLeg in (sorted(proxyLegMap.values(), key=operator.attrgetter('order'))):
-            # Is this leg part of the current call?
+    for inboundLeg in (sorted(proxyLegMap.values(), key=operator.attrgetter('order'))):
+        outboundLeg = proxyLegMap[inboundLeg.otherLeg]
+        if inboundLeg.sessionID is None or outboundLeg.sessionID is None:
+            continue
+        # Find an existing call to associate this leg with
+        foundCall = None
+        for call in callList:
             if inboundLeg.session() == call.session():
-                outboundLeg = proxyLegMap[inboundLeg.otherLeg]
-                if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpEIP:
-                    call.proxyList[1] = Proxy(1, inboundLeg.this, outboundLeg.this,
-                                              inboundLeg.individNum, outboundLeg.individNum,
-                                              inboundLeg.fromIP, outboundLeg.toIP,
-                                              inboundLeg.fromNettle, outboundLeg.toNettle)
+                foundCall = call
+                break
+        if foundCall is None:
+            # Create new call entry
+            foundCall = Call(inboundLeg.sessionID, inboundLeg.remoteSessionID)
+            callList.append(foundCall)
 
-                if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpCIP and outboundLeg.toIP == gCucmIP:
-                    call.proxyList[2] = Proxy(2, inboundLeg.this, outboundLeg.this,
-                                              inboundLeg.individNum, outboundLeg.individNum,
-                                              inboundLeg.fromIP, outboundLeg.toIP,
-                                              inboundLeg.fromNettle, outboundLeg.toNettle)
+        if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP in gExpEIP:
+            foundCall.proxyList[1] = Proxy(1, inboundLeg.this, outboundLeg.this,
+                                      inboundLeg.individNum, outboundLeg.individNum,
+                                      inboundLeg.fromIP, outboundLeg.toIP,
+                                      inboundLeg.fromNettle, outboundLeg.toNettle)
 
-                if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gCucmIP:
-                    call.proxyList[3] = Proxy(3, inboundLeg.this, outboundLeg.this,
-                                              inboundLeg.individNum, outboundLeg.individNum,
-                                              inboundLeg.fromIP, outboundLeg.toIP,
-                                              inboundLeg.fromNettle, outboundLeg.toNettle)
+        if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpCIP and outboundLeg.toIP == gCucmIP:
+            foundCall.proxyList[2] = Proxy(2, inboundLeg.this, outboundLeg.this,
+                                      inboundLeg.individNum, outboundLeg.individNum,
+                                      inboundLeg.fromIP, outboundLeg.toIP,
+                                      inboundLeg.fromNettle, outboundLeg.toNettle)
 
-                if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpCIP and outboundLeg.toIP == gExpEIP:
-                    call.proxyList[4] = Proxy(4, inboundLeg.this, outboundLeg.this,
-                                              inboundLeg.individNum, outboundLeg.individNum,
-                                              inboundLeg.fromIP, outboundLeg.toIP,
-                                              inboundLeg.fromNettle, outboundLeg.toNettle)
+        if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gCucmIP:
+            foundCall.proxyList[3] = Proxy(3, inboundLeg.this, outboundLeg.this,
+                                      inboundLeg.individNum, outboundLeg.individNum,
+                                      inboundLeg.fromIP, outboundLeg.toIP,
+                                      inboundLeg.fromNettle, outboundLeg.toNettle)
 
+        if inboundLeg.isInvite and inboundLeg.direction == 'Inbound' and inboundLeg.fromIP == gExpCIP and outboundLeg.toIP in gExpEIP:
+            foundCall.proxyList[4] = Proxy(4, inboundLeg.this, outboundLeg.this,
+                                      inboundLeg.individNum, outboundLeg.individNum,
+                                      inboundLeg.fromIP, outboundLeg.toIP,
+                                      inboundLeg.fromNettle, outboundLeg.toNettle)
 
 def getProxyTable(proxyList):
     proxyTable = PrettyTable(['Num', 'InboundLeg (fsm)', 'OutboundLeg (fsm)', 'FromIP', 'ToIP', 'FromNettle', 'ToNettle'])
@@ -2023,7 +2055,7 @@ def getProxyTable(proxyList):
 
     
 def getCallFlowTable(proxyList, routeMapE, routeMapC):
-    global gCucmIP, gExpEIP
+    global gCucmIP
     global gLogList
 
     origPhoneIP = proxyList[0].fromIP
@@ -2052,7 +2084,7 @@ def getCallFlowTable(proxyList, routeMapE, routeMapC):
 
 
 def getCallFlowSIP(proxyList):
-    global gCucmIP, gExpEIP
+    global gCucmIP
     global gLogList
     asciiRows = []
     origPhoneIP = proxyList[0].fromIP
@@ -2069,6 +2101,15 @@ def getCallFlowSIP(proxyList):
                               '', '', '', '', '', '', '', '', msg])
         elif log.this == gCucmIP:
             asciiRows.append([log.filename, log.linenum, log.timestamp, '', '', '', '', '', '', '', '', '', log.shortLog,
+                              '', '', '', '', '', '', '', '', ''])
+        elif log.this == 'cucmIn':
+            msg = {'rcvd': '<- ', 'sent': '-> '}.get(log.direction, '   ') + log.shortLog
+            asciiRows.append([log.filename, log.linenum, log.timestamp, '', '', '', '', '', '', '', '', '', msg,
+                              '', '', '', '', '', '', '', '', ''])
+
+        elif log.this == 'cucmOut':
+            msg = log.shortLog + {'rcvd': ' ->', 'sent': ' <-'}.get(log.direction, '')
+            asciiRows.append([log.filename, log.linenum, log.timestamp, '', '', '', '', '', '', '', '', '', msg,
                               '', '', '', '', '', '', '', '', ''])
 
         elif 'b2bua1in' in log.this:
@@ -2350,7 +2391,7 @@ def getCallFlowMediaE(proxyList, routeMapE):
                 asciiTable.append([None, None, timestamp, '', '', '', '', '', '', '', '', '', '',
                                   '', '', '', '', '', '', routestr0, routestr1, routestr2])
 
-            elif extIP1 == gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone1':
+            elif extIP1 in gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone1':
                 # This is a connection between exp-e traversal media stream and a TURN port allocated by phone1
                 action = event.action
                 timestamp = event.timestamp
@@ -2396,7 +2437,7 @@ def getCallFlowMediaE(proxyList, routeMapE):
                     asciiTable.append([None, None, timestamp, '', routestr0, routestr1, routestr2, routestr3, '', '', '', '', '',
                                       '', '', '', '', '', '', '', '', ''])
 
-            elif extIP1 == gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone2':
+            elif extIP1 in gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone2':
                 # This is a connection between exp-e traversal media stream and a TURN port allocated by phone2
                 action = event.action
                 timestamp = event.timestamp
@@ -2480,7 +2521,7 @@ def getCallFlowMediaC(routeMapC):
             extIP1 = event.extIP1
             extIP2 = event.extIP2
 
-            if gB2buaPortAssignment.get(internalPort1, '') is 'b2bua1in':
+            if gB2buaPortAssignment.get(internalPort1, '') == 'b2bua1in':
                 action = event.action
                 timestamp = event.timestamp
                 symbol1 = ' ?? '
@@ -2516,7 +2557,7 @@ def getCallFlowMediaC(routeMapC):
                 routestr3 = symbol1 + event.extPort2
                 asciiTable.append([None, None, timestamp, '', '', '', routestr0, symbol1, symbol1, routestr1 + routestr2, symbol1, symbol1, symbol1, symbol1, symbol1, routestr3, '', '', '', '', '', ''])
 
-            elif gB2buaPortAssignment.get(internalPort1, '') is 'b2bua2in':
+            elif gB2buaPortAssignment.get(internalPort1, '') == 'b2bua2in':
                 action = event.action
                 timestamp = event.timestamp
                 symbol1 = ' ?? '
@@ -2558,21 +2599,24 @@ def getCallFlowMediaC(routeMapC):
 
 
 
-def initialize(expeFilename, expcFilename, turnFilename):
+def initialize(expeFilename, expe2Filename, expcFilename):
     global gCurrentThisInstance
     global gFsmTable
     global gLogList
-    global gProxyLegMap, gProxyLegMapE, gProxyLegMapC
+    global gProxyLegMap, gProxyLegMapE, gProxyLegMapE2, gProxyLegMapC
     global gCallList
     global gManipulatorMap
-    global gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn
+    global gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapE2
     global gExpEIP, gExpCIP, gCucmIP, gExpCInternalIP
     global gPortAssignment, gB2buaPortAssignment, gCallIDMap, gPhone1IP, gLastReqSent
     global gCallIDtoSessionID, gCallIDtoRemoteSessionID
 
+    gProxyLegMapE = {}
+    gProxyLegMapE2 = {}
+    gProxyLegMapC = {}
     gPacketRelayMapE = {}
     gPacketRelayMapC = {}
-    gPacketRelayMapTurn = {}
+    gPacketRelayMapE2 = {}
     gPortAssignment = {}
     gB2buaPortAssignment = {}
     gCallIDMap = {}
@@ -2582,10 +2626,10 @@ def initialize(expeFilename, expcFilename, turnFilename):
     gPhone1IP = None
     routeMapE = {}
     routeMapC = {}
-    routeMapTurn = {}
+    routeMapE2 = {}
     mediaThreadMapE = {}
     mediaThreadMapC = {}
-    mediaThreadMapTurn = {}
+    mediaThreadMapE2 = {}
 
     # Table definitions
     gFsmTable = PrettyTable(['Timestamp', 'Source Specie', 'Source ID', 'Dest Specie', 'Dest ID', 'Msg', 'Next State'])
@@ -2600,7 +2644,7 @@ def initialize(expeFilename, expcFilename, turnFilename):
     # Proxies are numerically indexed by the order they are created. Each proxy includes both inbound and outbound legs.
     gCallList = []
 
-    verbose = False
+    verbose = True
 
     # ======== Process Exp E logs =========
 
@@ -2631,6 +2675,36 @@ def initialize(expeFilename, expcFilename, turnFilename):
             ptE = getPacketRelayTable(gPacketRelayMapE)
             print ptE.get_string(sortby="Timestamp")
             print "Size: " + str(len(gPacketRelayMapE))
+
+
+    if expe2Filename is not None:
+        gProxyLegMap.clear()
+        gManipulatorMap.clear()
+        parseFile(expe2Filename, routeMapE2, mediaThreadMapE2, gPacketRelayMapE2)
+        gProxyLegMapE2 = gProxyLegMap.copy()
+        buildProxyListForExpENoIP(gCallList, gProxyLegMapE2)
+        if verbose:
+            print
+            print "ROUTE TABLE E2"
+            routeTableE2 = getRouteMapTable(routeMapE2)
+            print routeTableE2
+
+            # Combine E2 route map with E's so they all get included in the message flow
+            routeMapE.update(routeMapE2)
+            print
+            print "ROUTE TABLE COMBINED"
+            routeTableCombined = getRouteMapTable(routeMapE)
+            print routeTableCombined
+
+            print
+            print "MEDIA THREAD TABLE E2"
+            mtE = getMediaThreadTable(mediaThreadMapE2)
+            print mtE.get_string(sortby="Timestamp")
+            print
+            print "PACKET RELAY TABLE E2"
+            ptE = getPacketRelayTable(gPacketRelayMapE2)
+            print ptE.get_string(sortby="Timestamp")
+            print "Size: " + str(len(gPacketRelayMapE2))
 
 
     # ======== Process Exp C logs =========
@@ -2666,31 +2740,6 @@ def initialize(expeFilename, expcFilename, turnFilename):
             print "Size: " + str(len(gPacketRelayMapC))
 
         buildProxyListForExpC(gCallList, gProxyLegMapC)
-
-    if turnFilename is not None:
-        parseFile(turnFilename, routeMapTurn, mediaThreadMapTurn, gPacketRelayMapTurn)
-        print
-        print "ROUTE TABLE TURN"
-        routeTableTurn = getRouteMapTable(routeMapTurn)
-        print routeTableTurn
-
-        # Combine TURN route map with E's so they all get included in the message flow
-        routeMapE.update(routeMapTurn)
-        print
-        print "ROUTE TABLE COMBINED"
-        routeTableCombined = getRouteMapTable(routeMapE)
-        print routeTableCombined
-
-        print
-        print "MEDIA THREAD TABLE TURN"
-        mtT = getMediaThreadTable(mediaThreadMapTurn)
-        print mtT.get_string(sortby="Timestamp")
-        print
-        print "PACKET RELAY TABLE TURN"
-        ptT = getPacketRelayTable(gPacketRelayMapTurn)
-        print ptT.get_string(sortby="Timestamp")
-        print "Size: " + str(len(gPacketRelayMapTurn))
-
 
 
     # ======== Common =========
@@ -2910,8 +2959,10 @@ def buildSequenceDiagram(proxyList):
     phone1set = set()
     phone2set = set()
     for call in gCallList:
-        phone1set.add(call.proxyList[0].fromIP)
-        phone2set.add(call.proxyList[5].toIP)
+        if call.proxyList[0].fromIP != '':
+            phone1set.add(call.proxyList[0].fromIP)
+        if call.proxyList[5].toIP != '':
+            phone2set.add(call.proxyList[5].toIP)
 
     origPhoneIP = proxyList[0].fromIP
     destPhoneIP = proxyList[5].toIP
@@ -3034,7 +3085,7 @@ def getTestHtml():
 
 
 def save_globals():
-    global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn, gPortAssignment, gB2buaPortAssignment
+    global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapE2, gPortAssignment, gB2buaPortAssignment
     with open("calls.dat", "wb") as f:
         pickle.dump(gCallList, f)
     with open("proxy.dat", "wb") as f:
@@ -3046,12 +3097,12 @@ def save_globals():
     with open("routemaps.dat", "wb") as f:
         pickle.dump([gRouteMapE, gRouteMapC], f)
     with open("packetrelay.dat", "wb") as f:
-        pickle.dump([gPacketRelayMapE, gPacketRelayMapE, gPacketRelayMapTurn], f)
+        pickle.dump([gPacketRelayMapE, gPacketRelayMapE2, gPacketRelayMapC], f)
     with open("portassignments.dat", "wb") as f:
         pickle.dump([gPortAssignment, gB2buaPortAssignment], f)
 
 def load_globals():
-    global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn, gPortAssignment, gB2buaPortAssignment
+    global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapE2, gPortAssignment, gB2buaPortAssignment
     try:
         with open("calls.dat") as f:
             gCallList = pickle.load(f)
@@ -3064,7 +3115,7 @@ def load_globals():
         with open("routemaps.dat") as f:
             gRouteMapE, gRouteMapC = pickle.load(f)
         with open("packetrelay.dat") as f:
-            gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapTurn = pickle.load(f)
+            gPacketRelayMapE, gPacketRelayMapE2, gPacketRelayMapC = pickle.load(f)
         with open("portassignments.dat") as f:
             gPortAssignment, gB2buaPortAssignment = pickle.load(f)
     except:
@@ -3075,12 +3126,11 @@ def load_globals():
 def index():
     return render_template('upload.html')
 
-#                       ExpE               ExpC              CUCM          Internal ExpC (if natted)
-gIpMap = {'bud':    ['10.81.54.5',     '10.81.54.102',   '10.81.54.105',   None],
-          'mandar': ['172.18.198.210', '172.18.198.211', '172.18.198.212', None],
-          'wei':    ['172.18.194.52',  '172.18.202.226', '200.1.1.11',     '200.1.1.102'], # Call goes through wsun2-test2
-          'wei3':   ['172.18.194.62',  '172.18.202.226', '200.1.1.11',     '200.1.1.102'], # Call goes through wsun2-test3
-          'slteam': ['10.89.67.40',    '10.89.67.42',    '10.89.118.41',   None]}
+#                       ExpE                                 ExpC              CUCM          Internal ExpC (if natted)
+gIpMap = {'bud':    [['10.81.54.5'],                     '10.81.54.102',   '10.81.54.105',   None],
+          'mandar': [['172.18.198.210'],                 '172.18.198.211', '172.18.198.212', None],
+          'wei':    [['172.18.194.52','172.18.194.62'],  '172.18.202.226', '200.1.1.11',     '200.1.1.102'], # Call goes through wsun2-test2
+          'slteam': [['10.89.67.40'],                    '10.89.67.42',    '10.89.118.41',   None]}
 
 @app.route('/uploader', methods=['GET', 'POST'])
 def upload_file():
@@ -3089,11 +3139,11 @@ def upload_file():
     # Called from the form input with filenames
     if request.method == 'POST':
         expeFilename = None
+        expe2Filename = None
         expcFilename = None
-        turnFilename = None
-        expcFile = request.files.get('fileC', None)
         expeFile = request.files.get('fileE', None)
-        turnFile = request.files.get('fileTURN', None)
+        expe2File = request.files.get('fileE2', None)
+        expcFile = request.files.get('fileC', None)
 
         # Check if at least one file is given
         if expcFile is None and expeFile is None:
@@ -3105,17 +3155,17 @@ def upload_file():
             expeFilename = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(expeFile.filename))
             expeFile.save(expeFilename)
 
+        # Expressway-E 2 log file in case the E is clustered (need to do this for the C as well)
+        if expe2File is not None:
+            # Save the file locally
+            expe2Filename = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(expe2File.filename))
+            expe2File.save(expe2Filename)
+
         # Expressway-C log file
         if expcFile is not None:
             # Save the file locally
             expcFilename = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(expcFile.filename))
             expcFile.save(expcFilename)
-
-        # TURN server log file. This is only needed if the TURN server is not the same as the Exp-E above
-        if turnFile is not None:
-            # Save the file locally
-            turnFilename = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(turnFile.filename))
-            turnFile.save(turnFilename)
 
         # Set IP addrs
         if request.form.get('deployment', 'other') != 'other':
@@ -3137,7 +3187,7 @@ def upload_file():
                 gExpCInternalIP = None
 
         # Parse the files!!
-        gProxyList, gRouteMapE, gRouteMapC = initialize(expeFilename, expcFilename, turnFilename)
+        gProxyList, gRouteMapE, gRouteMapC = initialize(expeFilename, expe2Filename, expcFilename)
 
         asciiProxyTable = getProxyTable(gProxyList)
         print
@@ -3169,11 +3219,30 @@ def check_log_levels():
         print e
         return "Cannot connect to Expressway, check your network connection and verify the Expressway is up and running."
 
+@app.route('/get_media_route_e')
+def get_media_route_e():
+    global gRouteMapE
+    data = "EXPRESSWAY-E MEDIA ROUTES\n"
+    ptE = getRouteMapTable(gRouteMapE)
+    data += ptE.get_string()
+    return '<pre>' + data + '</pre>'
+
+@app.route('/get_media_route_c')
+def get_media_route_c():
+    global gRouteMapC
+    ptE = getRouteMapTable(gRouteMapC)
+    data = "EXPRESSWAY-C MEDIA ROUTES\n"
+    data += ptE.get_string()
+    return '<pre>' + data + '</pre>'
+
 @app.route('/get_packet_relay_info_e')
 def get_packet_relay_info_e():
-    global gPacketRelayMapE
-    ptE = getPacketRelayTable(gPacketRelayMapE)
+    global gPacketRelayMapE, gPacketRelayMapE2
     data = "EXPRESSWAY-E PACKET RELAY\n"
+    ptE = getPacketRelayTable(gPacketRelayMapE)
+    data += ptE.get_string(sortby="Timestamp")
+    data += "\n\nEXPRESSWAY-E2 PACKET RELAY\n"
+    ptE = getPacketRelayTable(gPacketRelayMapE2)
     data += ptE.get_string(sortby="Timestamp")
     return '<pre>' + data + '</pre>'
 
@@ -3185,19 +3254,14 @@ def get_packet_relay_info_c():
     data += ptE.get_string(sortby="Timestamp")
     return '<pre>' + data + '</pre>'
 
-@app.route('/get_packet_relay_info_turn')
-def get_packet_relay_info_turn():
-    global gPacketRelayMapTurn
-    ptT = getPacketRelayTable(gPacketRelayMapTurn)
-    data = "TURN PACKET RELAY\n"
-    data += ptT.get_string(sortby="Timestamp")
-    return '<pre>' + data + '</pre>'
-
 @app.route('/get_proxy_legs_e')
 def get_proxy_legs_e():
-    global gProxyLegMapE
-    proxyLegTable = getProxyLegTable(gProxyLegMapE)
+    global gProxyLegMapE, gProxyLegMapE2
     data = "EXPRESSWAY-E PROXY LEGS\n"
+    proxyLegTable = getProxyLegTable(gProxyLegMapE)
+    data += proxyLegTable.get_string(sortby="Order")
+    data += "\n\nEXPRESSWAY-E2 PROXY LEGS\n"
+    proxyLegTable = getProxyLegTable(gProxyLegMapE2)
     data += proxyLegTable.get_string(sortby="Order")
     return '<pre>' + data + '</pre>'
 
@@ -3355,12 +3419,6 @@ def main_text():
     return
 
 def main():
-    global gExpEIP, gExpCIP, gCucmIP
-    #gOrigPhoneIP = '10.122.73.183'
-    #gDestPhoneIP = '10.122.73.147'
-    # gExpEIP = '10.81.54.5'
-    # gExpCIP = '10.81.54.102'
-    # gCucmIP = '10.81.54.105'
     #main_text()
     main_html()
 

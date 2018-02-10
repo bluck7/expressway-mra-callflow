@@ -108,6 +108,22 @@
 
         $(function()
         {
+            $('#get_media_route_e').bind('click', function()
+            {
+                $.get('/get_media_route_e', function(data) {
+                    var w = window.open();
+                    $(w.document.body).html(data)
+            	});
+          	});
+
+            $('#get_media_route_c').bind('click', function()
+            {
+                $.get('/get_media_route_c', function(data) {
+                    var w = window.open();
+                    $(w.document.body).html(data)
+            	});
+          	});
+
             $('#get_packet_relay_info_e').bind('click', function()
             {
                 $.get('/get_packet_relay_info_e', function(data) {
@@ -119,14 +135,6 @@
             $('#get_packet_relay_info_c').bind('click', function()
             {
                 $.get('/get_packet_relay_info_c', function(data) {
-                    var w = window.open();
-                    $(w.document.body).html(data)
-            	});
-          	});
-
-            $('#get_packet_relay_info_turn').bind('click', function()
-            {
-                $.get('/get_packet_relay_info_turn', function(data) {
                     var w = window.open();
                     $(w.document.body).html(data)
             	});
@@ -241,10 +249,14 @@
 <div class="ui-layout-north">
 	<div>
 		<fieldset>
+			<legend>Media Route Data</legend>
+			<button id="get_media_route_e">Expressway-E</button>
+			<button id="get_media_route_c">Expressway-C</button>
+		</fieldset>
+		<fieldset>
 			<legend>Packet Relay Data</legend>
 			<button id="get_packet_relay_info_e">Expressway-E</button>
 			<button id="get_packet_relay_info_c">Expressway-C</button>
-			<button id="get_packet_relay_info_turn">TURN</button>
 		</fieldset>
 		<fieldset>
 			<legend>Proxy Info</legend>
