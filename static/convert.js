@@ -1,6 +1,6 @@
 var sequenceDiagram = (this && this.sequenceDiagram) || {};
 (function (api) {
-	var handledCounts = [2, 3, 4, 5, 6, 9, 12, 20];
+	var handledCounts = [2, 3, 4, 5, 6, 9, 11, 12, 13, 14, 15, 16, 20];
 
 	function Diagram() {
 		this.currentAgents = [];
@@ -42,14 +42,14 @@ var sequenceDiagram = (this && this.sequenceDiagram) || {};
 			}
 			return this;
 		},
-		addAction: function (from, to, label) {
+		addAction: function (from, to, label, myclass) {
 			if (this.currentAgents.indexOf(from) === -1) {
 				this.currentAgents.push(from);
 			}
 			if (this.currentAgents.indexOf(to) === -1) {
 				this.currentAgents.push(to);
 			}
-			this.events.push({from: from, to: to, label: label});
+			this.events.push({from: from, to: to, label: label, myclass: myclass});
 		},
 		addEvent: function (left, right, label, type) {
 			if (this.currentAgents.indexOf(left) === -1) {
@@ -158,13 +158,13 @@ var sequenceDiagram = (this && this.sequenceDiagram) || {};
 						var toPos = agents.indexOf(event.to) + 1;
 						if (fromPos < toPos) {
 							var alt = event.from + ' --> ' + event.to;
-							html.push(indent + '<div class="action left-' + fromPos + '-' + agentCount + ' right-' + toPos + '-' + agentCount + '">'
+							html.push(indent + '<div class="action left-' + fromPos + '-' + agentCount + ' right-' + toPos + '-' + agentCount + ' ' + (event.myclass || '') + '">'
 								+ '<div class="arrow" title="' + escapeHtml(alt) + '">' + lineImages.right + '</div>'
 								+ (event.label || '')
 								+ '</div>');
 						} else if (fromPos > toPos) {
 							var alt = event.to + ' <-- ' + event.from;
-							html.push(indent + '<div class="action left-' + toPos + '-' + agentCount + ' right-' + fromPos + '-' + agentCount + '">'
+							html.push(indent + '<div class="action left-' + toPos + '-' + agentCount + ' right-' + fromPos + '-' + agentCount + ' ' + (event.myclass || '') + '">'
 								+ '<div class="arrow" title="' + escapeHtml(alt) + '">' + lineImages.left + '</div>'
 								+ (event.label || '')
 								+ '</div>');
@@ -273,6 +273,26 @@ var sequenceDiagram = (this && this.sequenceDiagram) || {};
 			css.push('	margin-right: ' + percentage((columnCount - pos - 0.5)/columnCount));
 			css.push('}');
 		}
+
+        // Bud - classes to use for an agent heading that spans multiple columns. These are for Expressway-C.
+        //       Use span-3-5 and span-7-9 if only one phone on the left, use span-4-6 and span-8-10 if 2 phones
+        //       on the left.
+        css.push('.span-3-5 {');
+        css.push('  margin-left: ' + percentage(2/columnCount) + ';');
+        css.push('  margin-right: ' + percentage((columnCount - 5)/columnCount) + ';');
+        css.push('}');
+        css.push('.span-7-9 {');
+        css.push('  margin-left: ' + percentage(6/columnCount) + ';');
+        css.push('  margin-right: ' + percentage((columnCount - 9)/columnCount) + ';');
+        css.push('}');
+        css.push('.span-4-6 {');
+        css.push('  margin-left: ' + percentage(3/columnCount) + ';');
+        css.push('  margin-right: ' + percentage((columnCount - 6)/columnCount) + ';');
+        css.push('}');
+        css.push('.span-8-10 {');
+        css.push('  margin-left: ' + percentage(7/columnCount) + ';');
+        css.push('  margin-right: ' + percentage((columnCount - 10)/columnCount) + ';');
+        css.push('}');
 		return css.join([]);
 	};
 	api.fromElement = function (element) {
@@ -319,6 +339,7 @@ var sequenceDiagram = (this && this.sequenceDiagram) || {};
 				elementContent = node.innerHTML;
 				fromEntity = node.getAttribute('from') || node.getAttribute('for') || '?';
 				toEntity = node.getAttribute('to') || node.getAttribute('for') || '??';
+				myclass = node.getAttribute('class') || '';
 			} else if (hasClass(node, 'lifeline', true)) {
 				elementContent = node.innerHTML;
 				fromEntity = null;
@@ -347,7 +368,7 @@ var sequenceDiagram = (this && this.sequenceDiagram) || {};
 			if (hasClass(node, 'header', true)) {
 				diagram.setAgents(entities, entityNames);
 			} else if (hasClass(node, 'action', true)) {
-				diagram.addAction(fromEntity, toEntity, elementContent);
+				diagram.addAction(fromEntity, toEntity, elementContent, myclass);
 			} else if (hasClass(node, 'note', true)) {
 				diagram.addEvent(fromEntity || toEntity, toEntity || fromEntity, elementContent, 'note');
 			} else if (hasClass(node, 'event', true)) {
@@ -434,8 +455,11 @@ var sequenceDiagram = (this && this.sequenceDiagram) || {};
 		lineImages.left = leftImg;
 		lineImages.right = rightImg;
 	};
-	var columnsCssDone = {};
 	api.convert = function (element) {
+    	// Bud - moved columnsCssDone initialization inside of api.convert() so it gets cleared out each time the
+    	//       sequence diagram and regenerated. This ensures the style elements are replaced each time in case
+    	//       the number of columns changed (e.g. includeTurn).
+    	var columnsCssDone = {};
 		element = element || document.body;
 		walkNodes(element, function (node) {
 			if (node.style && node.style.display === 'none') {
@@ -453,9 +477,13 @@ var sequenceDiagram = (this && this.sequenceDiagram) || {};
 					if (!columnsCssDone[columnCount]) {
 						columnsCssDone[columnCount] = true;
 						var css = api.generateCss(columnCount);
-						var style = document.createElement('style');
+						var style = document.getElementById("seqStyle");
+                        if (!style) {
+    						style = document.createElement('style');
+	    					style.id = 'seqStyle'
+    						document.head.appendChild(style);
+	    				}
 						style.innerHTML = css;
-						document.head.appendChild(style);
 					}
 				}
 

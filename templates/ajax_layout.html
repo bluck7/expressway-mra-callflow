@@ -66,9 +66,10 @@
 	.ui-layout-north {
 		background:		#EEE;
 		border-bottom:	1px;
-		padding:		10px 20px;
+		padding:		10px 25px 0px 10px;
 	}
 	.ui-layout-center {
+		background:     #EEE;
 		border-top:		0;
 		padding:		0 10px 10px;
 	}
@@ -103,6 +104,10 @@
                 south__size:			Math.floor(screen.availHeight * .20) // 20% screen height
             ,	north__spacing_open:	4
             });
+
+			// Copy sequence diagram headers into the ui-layout-north pane
+			header = $('.header').html();
+			$('.top-header').html(header);
 
         });
 
@@ -189,6 +194,7 @@
             {
                 $.get('/load_table', function(data) {
                     $(".ui-layout-center").html(data);
+                    $('.top-header').html(' ');
                     $('a').bind('click', function(event)
                     {
                         get_file_snippet(event)
@@ -199,10 +205,31 @@
 
         $(function()
         {
-            $('#load_sequence_diagram').bind('click', function()
+			$('#load_sequence_diagram').submit(function(e) {
+				e.preventDefault();
+				$.ajax({
+					url: '/load_sequence_diagram',
+					data: $(this).serialize(),
+					type: 'POST',
+					success: function(data) {
+						$(".ui-layout-center").html(data['flow']);
+						$(".genus-header").html(data['genus']);
+						header = $('.header').html();
+						$('.top-header').html(header);
+						$('a').bind('click', function(event)
+						{
+							get_file_snippet(event)
+						});
+					}
+				});
+			});
+            $('#load_sequence_diagram2').submit('click', function()
             {
                 $.get('/load_sequence_diagram', function(data) {
-                    $(".ui-layout-center").html(data);
+                    $(".ui-layout-center").html(data['flow']);
+                    $(".genus-header").html(data['genus']);
+                    header = $('.header').html();
+                    $('.top-header').html(header);
                     $('a').bind('click', function(event)
                     {
                         get_file_snippet(event)
@@ -267,9 +294,22 @@
 		<fieldset>
 			<legend>Display Options</legend>
 			<button id="load_table">Table</button>
-			<button id="load_sequence_diagram">Sequence Diagram</button>
 			<button id="get_ascii_table">ASCII</button>
+			<div style="display: inline-block;">
+				<form id="load_sequence_diagram" action="/load_sequence_diagram">
+					<button type="submit">Sequence Diagram</button>
+					<input type="checkbox" id="includeTurn" name="includeTurn" value="yes">
+					<label for="includeTurn" style="font-size: small;">Include TURN</label>
+				</form>
+			</div>
 		</fieldset>
+	</div>
+	<div class="sequence-diagram-layout">
+		<div class="genus-header">
+			{{ genus }}
+        </div>
+		<div class="top-header">
+		</div>
 	</div>
 </div>
 

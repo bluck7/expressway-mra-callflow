@@ -1,5 +1,6 @@
 .header, header {
 	border-bottom: 2px solid #888;
+	display: none;
 }
 
 .entity, entity {
@@ -12,6 +13,12 @@
 	font-weight: bold;
 	color: #000;
 	*/
+}
+
+/* Bud - the entity name shows up in the group lifeline label which I don't want. It is in the "for" element, so
+         I make that hidden so just the label shows */
+for {
+    display: none;
 }
 
 .action, action, .event, event, .note, note {
@@ -43,9 +50,10 @@
 	display: none;
 }
 
-.sequence-diagram-layout .header {
+/* The genus-header class is what I added for the entity heading that spans multiple columns, e.g. Expressway-C */
+.sequence-diagram-layout .header, .top-header, .genus-header {
 	position: relative;
-	height: 3em;
+	height: 1.5em;
 }
 
 .sequence-diagram-layout .entity {
@@ -106,6 +114,18 @@
 	width: 100%;
 }
 
+/* Bud - my classes to control the line and text colors based on the type of signal */
+.media {
+    stroke: green;
+    fill:   green;
+}
+
+.media-removal {
+    stroke: orange;
+    fill:   orange;
+    /*stroke-dasharray: 10,10;*/
+}
+
 .sequence-diagram-layout .group {
 	position: relative;
 	margin: 0;
@@ -119,8 +139,8 @@
 	top: 0;
 	left: 0;
 	bottom: 0;
-	border-left: 0.5em solid #89C;
-	color: #78B;
+	border-left: 0.5em solid lightcoral; /* Bud - color of hold, for example. */
+	color: lightcoral;
 	padding-left: 0.3em;
 }
 

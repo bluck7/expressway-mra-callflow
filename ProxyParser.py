@@ -69,7 +69,8 @@ ProxyNamedTuple = namedtuple('ProxyNamedTuple', 'this individNum direction fromN
 
 
 class Log:
-    def __init__(self, this='', timestamp='', shortLog='', longLog='', direction='', rawTimestamp=None, currLineNum=None, srcEntity=''):
+    def __init__(self, this='', timestamp='', shortLog='', longLog='', direction='', rawTimestamp=None,
+                 currLineNum=None, srcEntity='', logType=''):
         self.this      = this
         if rawTimestamp is not None:
             # Caller already converted the timestamp
@@ -86,6 +87,7 @@ class Log:
             self.linenum   = gCurrLinenum
         self.filename  = gCurrFilename
         self.srcEntity = srcEntity
+        self.logType = logType
 
     def getShortLogHtml(self):
         return self.shortLog.replace(' ', '&nbsp;')
@@ -1371,11 +1373,11 @@ def parse_networkSipDebug(line, f):
         # Look for Call-Info headers to see if this is a HOLD or RESUME message
         if line == "Call-Info: <urn:x-cisco-remotecc:hold>":
             operation = "  *** HOLD ***"
-            gLogList.append(Log(logId, timestamp, operation, line))
+            gLogList.append(Log(logId, timestamp, operation, line, 'hold'))
             continue
         if line == "Call-Info: <urn:x-cisco-remotecc:resume>":
             operation = "  *** RESUME ***"
-            gLogList.append(Log(logId, timestamp, operation, line))
+            gLogList.append(Log(logId, timestamp, operation, line, 'resume'))
             continue
 
         # Check if its a Route header and if so, whether it contains CEtcp or CEtls, either of which indicate the
@@ -2906,16 +2908,22 @@ class SequenceDiagram(object):
     def __init__(self, entityList):
         SequenceDiagram.html += '''
     		<sequence-diagram-semantic>
-                <header>
+                <header style="display: none;">
         '''
         for entity in entityList:
             SequenceDiagram.html += '<entity>' + entity + '</entity>\n'
 
-            SequenceDiagram.html += '</header>\n'
+        SequenceDiagram.html += '</header>\n'
 
-    def action(cls, _from, to, text, filename, linenum):
-        cls.html += '<action from="%s" to="%s"><a href="#%s#%s">%s</a></action>\n' % (_from, to, filename, linenum, text)
+    def action(cls, _from, to, _class, text, filename, linenum):
+        cls.html += '<action from="%s" to="%s" class="%s"><a href="#%s#%s">%s</a></action>\n' % (_from, to, _class, filename, linenum, text)
 
+    def group(cls, _for, text):
+        cls.html += '<group>\n'
+        cls.html += '<lifeline><for>%s</for>%s</lifeline>\n' % (_for, text)
+
+    def endgroup(cls):
+        cls.html += '</group>\n'
 
     def _note_event(cls, note_or_event='', entity1=None, entity2=None, text='', filename=None, linenum=None):
 
@@ -2949,11 +2957,176 @@ class SequenceDiagram(object):
     		<script>sequenceDiagram.convert(document.querySelector(".ui-layout-center.ui-layout-pane.ui-layout-pane-center"))</script>
         '''
 
-def buildSequenceDiagram(proxyList):
-    global gLogList, gCallList
+def buildGenus(includeTurn):
+    if includeTurn:
+        genus  = '            <div class="entity span-4-6" style="border-bottom: 1px solid;">Expressway-C</div>\n'
+        genus += '            <div class="entity span-8-10" style="border-bottom: 1px solid;">Expressway-C</div>'
+    else:
+        genus  = '            <div class="entity span-3-5" style="border-bottom: 1px solid;">Expressway-C</div>\n'
+        genus += '            <div class="entity span-7-9" style="border-bottom: 1px solid;">Expressway-C</div>'
+    return genus
+
+
+# These classes should match the class names add to convert.js and used in sequence-diagram.css. They are used to
+# draw the arrow with specific color and stroke, and to color the text red if an error.
+sipclass = "sipmsg"
+siperrorclass = "siperror"
+mediaclass = "media"
+mediaremovalclass = "media-removal"
+
+def getExpEMediaLogs(proxyList, routeMapE):
+    global gExpEIP, gPortAssignment
+    logList = []
+    asciiTable = []
+    turnPort2ProxyIndexMap = {}
+    origPhoneIP = proxyList[0].fromIP
+    destPhoneIP = proxyList[5].toIP
+
+    filterOn = False
+
+    # Scan through our route map and record which phone the TURN allocations are for because when we encounter
+    # a subsequent traversal connection to the 24000 range port, we'll know who its for. Otherwise there's no
+    # clue in the route map entry itself, just the 24000 range port.
+    for route in routeMapE.values():
+        for event in route.event:
+            if route.port1 == '3478' and event.extIP1 == origPhoneIP:
+                # Connection between phone1 and TURN server
+                turnPort2ProxyIndexMap[route.port2] = 'phone1'
+            elif route.port1 == '3478' and event.extIP1 == destPhoneIP:
+                # Connection between phone2 and TURN server
+                turnPort2ProxyIndexMap[route.port2] = 'phone2'
+
+    for route in routeMapE.values():
+        for i in range(0, len(route.event)):
+            event = route.event[i]
+            extIP1 = event.extIP1
+            extIP2 = event.extIP2
+            if extIP1 == 'undef':
+                # This is typical for incoming routes: the external source is undefined, or any source. But we need to
+                # know which side of the call flow to put the info, so we check our port to IP mapping for a hint.
+                extIP1 = gPortAssignment.get(route.port1)
+
+            action = event.action
+            timestamp = event.timestamp
+            symbol1 = ' ?? '
+            symbol2 = ' ??? '
+            direction = 'rcvd'
+            logtype = mediaclass
+            oppositeAction = 'Undefined'
+            # The following code does 2 things:
+            #   1 - checking to see if we have 2 adjacent actions that cancel each other out.
+            #       If so, we can eliminate them from the logs to reduce the clutter
+            #   2 - set the arrow direction depending on whether its an incoming or outgoing action
+            if action == 'Create Incoming':
+                oppositeAction = 'Delete Incoming'
+                direction = 'rcvd'
+                logtype = mediaclass
+                symbol1 = ' -- '
+                symbol2 = ' == '
+            elif action == 'Create Outgoing':
+                oppositeAction = 'Delete Outgoing'
+                direction = 'sent'
+                logtype = mediaclass
+                symbol1 = ' -- '
+                symbol2 = ' == '
+            elif action == 'Delete Incoming':
+                oppositeAction = 'Create Incoming'
+                direction = 'rcvd'
+                logtype = mediaremovalclass
+                symbol1 = ' -- '
+                symbol2 = '    '
+            elif action == 'Delete Outgoing':
+                oppositeAction = 'Create Outgoing'
+                direction = 'sent'
+                logtype = mediaremovalclass
+                symbol1 = ' -- '
+                symbol2 = '    '
+            if filterOn and i+1 < len(route.event) and route.event[i+1].timestamp[0:len(timestamp)-1] == timestamp[0:len(timestamp)-1] and route.event[i+1].action == oppositeAction:
+                # This event is immediately cancelled by the next one so skip both. We only check events that have identical
+                # timestamps, otherwise we might miss significant events. We check the first 12 characters of the timestamp
+                # because we add an artificial 13th character to make the logs sequencial when sorting (see getTimestamp()).
+                i += 2
+                continue
+
+            if proxyList[0].fromIP == extIP1 and proxyList[0].toIP == extIP2:
+                # Connection between phone1 and exp-e (proxy 0)
+                shortstr = event.extPort1 + symbol1 + event.extPort2
+                longstr = event.extPort1 + symbol1 + route.port1 + symbol2 + route.port2 + symbol1 + event.extPort2
+                if 48000 <= int(event.extPort2) <= 59999:
+                    # ports in the 48000-59999 range are allocated by the B2BUA so show the route in the B2BUA column
+                    logList.append(Log('b2bua1in', timestamp, shortLog=shortstr, longLog=longstr,
+                                       direction=direction, srcEntity=origPhoneIP, logType=logtype))
+                else:
+                    # otherwise ports are allocated by the proxy
+                    logList.append(Log('proxy1in', timestamp, shortLog=shortstr, longLog=longstr,
+                                       direction=direction, srcEntity=origPhoneIP, logType=logtype))
+
+            elif proxyList[5].toIP == extIP1 and proxyList[5].fromIP == extIP2:
+                # Connection between phone2 and exp-e (proxy 5)
+                shortstr = event.extPort2 + symbol1 + event.extPort1
+                longstr = event.extPort2 + symbol1 + route.port2 + symbol2 + route.port1 + symbol1 + event.extPort1
+                if 48000 <= int(event.extPort2) <= 59999:
+                    # ports in the 48000-59999 range are allocated by the B2BUA so show the route in the B2BUA column
+                    logList.append(Log('b2bua2out', timestamp, shortLog=shortstr, longLog=longstr,
+                                       direction=direction, srcEntity=destPhoneIP, logType=logtype))
+                else:
+                    # otherwise ports are allocated by the proxy
+                    logList.append(Log('proxy4out', timestamp, shortLog=shortstr, longLog=longstr,
+                                       direction=direction, srcEntity=destPhoneIP, logType=logtype))
+
+            # Check for TURN connections
+            elif route.port1 == '3478' and extIP1 == origPhoneIP:
+                # Connection between phone1 and TURN server.
+                shortstr = event.extPort1 + symbol1 + event.extPort2
+                longstr = event.extPort1 + symbol1 + route.port1 + symbol2 + route.port2 + symbol1 + event.extPort2
+                logList.append(Log('turn1in', timestamp, shortLog=shortstr, longLog=longstr,
+                                   direction=direction, srcEntity=origPhoneIP, logType=logtype))
+
+            elif route.port1 == '3478' and extIP1 == destPhoneIP:
+                # Connection between phone2 and TURN server
+                shortstr = event.extPort2 + symbol1 + event.extPort1
+                longstr = event.extPort2 + symbol1 + route.port2 + symbol2 + route.port1 + symbol1 + event.extPort1
+                logList.append(Log('turn2out', timestamp, shortLog=shortstr, longLog=longstr,
+                                   direction=direction, srcEntity=destPhoneIP, logType=logtype))
+
+            elif extIP1 in gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone1':
+                # This is a connection between exp-e traversal media stream and a TURN port allocated by phone1
+                shortstr = event.extPort1 + symbol1 + event.extPort2
+                longstr = event.extPort1 + symbol1 + route.port1 + symbol2 + route.port2 + symbol1 + event.extPort2
+                if 48000 <= int(event.extPort2) <= 59999:
+                    # ports in the 48000-59999 range are allocated by the B2BUA so show the route in the B2BUA column
+                    logList.append(Log('turn1out', timestamp, shortLog=shortstr, longLog=longstr,
+                                       direction=direction, srcEntity='B2BUA1', logType=logtype))
+                else:
+                    # otherwise ports are allocated by the proxy
+                    logList.append(Log('turn1out', timestamp, shortLog=shortstr, longLog=longstr,
+                                       direction=direction, srcEntity='Proxy1', logType=logtype))
+
+            elif extIP1 in gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone2':
+                # This is a connection between exp-e traversal media stream and a TURN port allocated by phone2
+                shortstr = event.extPort2 + symbol1 + event.extPort1
+                longstr = event.extPort2 + symbol1 + route.port2 + symbol2 + route.port1 + symbol1 + event.extPort1
+                if 48000 <= int(event.extPort2) <= 59999:
+                    # ports in the 48000-59999 range are allocated by the B2BUA so show the route in the B2BUA column
+                    logList.append(Log('turn2in', timestamp, shortLog=shortstr, longLog=longstr,
+                                       direction=direction, srcEntity='B2BUA2', logType=logtype))
+                else:
+                    # otherwise ports are allocated by the proxy
+                    logList.append(Log('turn2in', timestamp, shortLog=shortstr, longLog=longstr,
+                                       direction=direction, srcEntity='Proxy4', logType=logtype))
+    return logList
+
+
+def buildSequenceDiagram(includeTurn):
+    global gLogList, gCallList, gProxyList, gRouteMapE, gRouteMapC
+
+    # Build a new log list that has the media route information. We don't permanently add routing to the gLogList
+    # because the user may want to display the sequence diagram with or without the media info.
+    logList = list(gLogList)
+    logList.extend(getExpEMediaLogs(gProxyList, gRouteMapE))
 
     # Sort the log list
-    sortedLogs = sorted(gLogList, key=lambda x: getattr(x, 'timestamp'))
+    sortedLogs = sorted(logList, key=lambda x: getattr(x, 'timestamp'))
 
     # Find out how many endpoints are involved across all of the calls
     phone1set = set()
@@ -2964,9 +3137,8 @@ def buildSequenceDiagram(proxyList):
         if call.proxyList[5].toIP != '':
             phone2set.add(call.proxyList[5].toIP)
 
-    origPhoneIP = proxyList[0].fromIP
-    destPhoneIP = proxyList[5].toIP
-    proxy0Entity     = 'Proxy0'
+    turn1Entity      = 'TURN1'
+    proxy0Entity     = 'Exp-E1'
     proxy1Entity     = 'Proxy1'
     b2bua1Entity     = 'B2BUA1'
     proxy2Entity     = 'Proxy2'
@@ -2974,76 +3146,132 @@ def buildSequenceDiagram(proxyList):
     proxy3Entity     = 'Proxy3'
     b2bua2Entity     = 'B2BUA2'
     proxy4Entity     = 'Proxy4'
-    proxy5Entity     = 'Proxy5'
-    entityList = [proxy0Entity, proxy1Entity, b2bua1Entity, proxy2Entity, cucmEntity, proxy3Entity, b2bua2Entity, proxy4Entity, proxy5Entity]
+    proxy5Entity     = 'Exp-E2'
+    turn2Entity      = 'TURN2'
+    if includeTurn:
+        entityList = [turn1Entity, proxy0Entity, proxy1Entity, b2bua1Entity, proxy2Entity, cucmEntity, proxy3Entity, b2bua2Entity, proxy4Entity, proxy5Entity, turn2Entity]
+    else:
+        entityList = [proxy0Entity, proxy1Entity, b2bua1Entity, proxy2Entity, cucmEntity, proxy3Entity, b2bua2Entity, proxy4Entity, proxy5Entity]
     sdEntities = list(phone1set)
     sdEntities.extend(entityList)
     sdEntities.extend(list(phone2set))
     sd = SequenceDiagram(sdEntities)
 
     for log in sortedLogs:
-        # search for the phone IPs, CUCM IP, or the this pointer in our proxy list
-        if log.this in phone1set:
+        # The direction field of the log is used to decide if the log belongs in the sequence diagram, and
+        # how to include it. There are some logs that appear in the table view but not in the sequence diagram.
+        # In those cases the log doesn't set the direction.
+
+        # Check if one of the phones went on hold or resumed. If so, we put 'hold' or 'resume' in the direction
+        # field. The log.this field contains the phone IP that did the hold. Note that this mechanism doesn't work
+        # if both endpoints go on hold and come off of hold in a non-nested way because multiple groups can only
+        # be nested.
+        if log.this in phone1set|phone2set and log.direction == 'hold':
+            sd.group(log.this, 'Hold')
+        elif log.direction == 'resume':
+            sd.endgroup()
+
+        # Search for the phone IPs or entity sides. "In" and "Out" are relative to the direction of the initial INIVTE
+        # which is always left to right.
+        elif log.this in phone1set:
             if log.direction == 'rcvd':
-                sd.action(log.this, proxy0Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(log.this, proxy0Entity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(proxy0Entity, log.this, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy0Entity, log.this, sipclass, log.shortLog, log.filename, log.linenum)
         elif log.this in phone2set:
             if log.direction == 'rcvd':
-                sd.action(log.this, proxy5Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(log.this, proxy5Entity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(proxy5Entity, log.this, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy5Entity, log.this, sipclass, log.shortLog, log.filename, log.linenum)
         elif log.this == 'b2bua1in':
             if log.direction == 'rcvd':
-                sd.action(proxy1Entity, b2bua1Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy1Entity, b2bua1Entity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(b2bua1Entity, proxy1Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(b2bua1Entity, proxy1Entity, sipclass, log.shortLog, log.filename, log.linenum)
         elif log.this == 'b2bua1out':
             if log.direction == 'rcvd':
-                sd.action(proxy2Entity, b2bua1Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy2Entity, b2bua1Entity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(b2bua1Entity, proxy2Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(b2bua1Entity, proxy2Entity, sipclass, log.shortLog, log.filename, log.linenum)
         elif log.this == 'b2bua2in':
             if log.direction == 'rcvd':
-                sd.action(proxy3Entity, b2bua2Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy3Entity, b2bua2Entity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(b2bua2Entity, proxy3Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(b2bua2Entity, proxy3Entity, sipclass, log.shortLog, log.filename, log.linenum)
         elif log.this == 'b2bua2out':
             if log.direction == 'rcvd':
-                sd.action(proxy4Entity, b2bua2Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy4Entity, b2bua2Entity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(b2bua2Entity, proxy4Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(b2bua2Entity, proxy4Entity, sipclass, log.shortLog, log.filename, log.linenum)
         elif log.this == 'cucmIn':
             if log.direction == 'sent':
-                sd.action(proxy2Entity, cucmEntity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy2Entity, cucmEntity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'rcvd':
-                sd.action(cucmEntity, proxy2Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(cucmEntity, proxy2Entity, sipclass, log.shortLog, log.filename, log.linenum)
         elif log.this == 'cucmOut':
             if log.direction == 'sent':
-                sd.action(proxy3Entity, cucmEntity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy3Entity, cucmEntity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'rcvd':
-                sd.action(cucmEntity, proxy3Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(cucmEntity, proxy3Entity, sipclass, log.shortLog, log.filename, log.linenum)
 
         # elif log.this == 'proxy0in':
         #     if log.direction == 'rcvd':
-        #         sd.action(phone1Entity, proxy0Entity, log.shortLog, log.filename, log.linenum)
+        #         sd.action(phone1Entity, proxy0Entity, sipclass, log.shortLog, log.filename, log.linenum)
         #     elif log.direction == 'sent':
-        #         sd.action(proxy0Entity, phone1Entity, log.shortLog, log.filename, log.linenum)
+        #         sd.action(proxy0Entity, phone1Entity, sipclass, log.shortLog, log.filename, log.linenum)
         elif log.this == 'proxy0out':
             if log.direction == 'rcvd':
-                sd.action(log.srcEntity, proxy0Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(log.srcEntity, proxy0Entity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(proxy0Entity, proxy1Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy0Entity, proxy1Entity, sipclass, log.shortLog, log.filename, log.linenum)
         elif log.this == 'proxy5in':
             if log.direction == 'rcvd':
-                sd.action(log.srcEntity, proxy5Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(log.srcEntity, proxy5Entity, sipclass, log.shortLog, log.filename, log.linenum)
             elif log.direction == 'sent':
-                sd.action(proxy5Entity, proxy4Entity, log.shortLog, log.filename, log.linenum)
+                sd.action(proxy5Entity, proxy4Entity, sipclass, log.shortLog, log.filename, log.linenum)
         # elif log.this == 'proxy5out':
         #     if log.direction == 'rcvd':
-        #         sd.action(phone2Entity, proxy5Entity, log.shortLog, log.filename, log.linenum)
+        #         sd.action(phone2Entity, proxy5Entity, sipclass, log.shortLog, log.filename, log.linenum)
         #     elif log.direction == 'sent':
-        #         sd.action(proxy5Entity, phone2Entity, log.shortLog, log.filename, log.linenum)
+        #         sd.action(proxy5Entity, phone2Entity, sipclass, log.shortLog, log.filename, log.linenum)
+
+        elif log.this == 'proxy1in':
+            if log.direction == 'rcvd':
+                sd.action(log.srcEntity, proxy1Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(proxy1Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+        elif log.this == 'proxy4out':
+            if log.direction == 'rcvd':
+                sd.action(log.srcEntity, proxy4Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(proxy4Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+        elif log.this == 'turn1in' and includeTurn:
+            if log.direction == 'rcvd':
+                sd.action(log.srcEntity, proxy0Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(proxy0Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+        elif log.this == 'turn1out' and includeTurn:
+            if log.direction == 'rcvd':
+                sd.action(turn1Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(log.srcEntity, turn1Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+        elif log.this == 'turn2out' and includeTurn:
+            if log.direction == 'rcvd':
+                sd.action(log.srcEntity, proxy5Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(proxy5Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+        elif log.this == 'turn2in' and includeTurn:
+            if log.direction == 'rcvd':
+                sd.action(turn2Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+            elif log.direction == 'sent':
+                sd.action(log.srcEntity, turn2Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+
 
     return sd.get_html()
 
@@ -3204,8 +3432,9 @@ def upload_file():
         # table = MsgFlowTable(listOfRows, html_attrs={'frame': 'border', 'rules': 'cols'})
         # htmlMsgTable = Markup(table.__html__())
         # return render_template('ajax_layout.html', flow=htmlMsgTable)
-        html = buildSequenceDiagram(gProxyList)
-        return render_template('ajax_layout.html', flow=Markup(html))
+        flow = buildSequenceDiagram(gProxyList)
+        genus = buildGenus(True)
+        return render_template('ajax_layout.html', flow=Markup(flow), genus=Markup(genus))
 
 @app.route('/check_log_levels')
 def check_log_levels():
@@ -3312,14 +3541,21 @@ def load_table():
     mtable = MsgFlowTable(listOfRows, html_attrs={'frame': 'border', 'rules': 'cols'})
     return mtable.__html__()
 
-@app.route('/load_sequence_diagram')
+@app.route('/load_sequence_diagram', methods=['GET', 'POST'])
 def load_sequence_diagram():
     # Load previously saved data from files, build a sequence diagram, and return the html. Only one saved table can be
     # returned at the moment.
-    global gProxyList
     load_globals()
-    html = buildSequenceDiagram(gProxyList)
-    return html
+    includeTurn = False
+    if request.method == 'POST':
+        if request.form.get('includeTurn') == 'yes':
+            includeTurn = True
+    else:
+        includeTurn = True
+
+    flow = buildSequenceDiagram(includeTurn)
+    genus = buildGenus(includeTurn)
+    return jsonify(flow=flow, genus=genus)
 
 @app.route('/load_main_empty')
 def load_main_empty():
