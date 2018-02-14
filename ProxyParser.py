@@ -44,6 +44,7 @@ gCallIDtoSessionID = {}
 gCallIDtoRemoteSessionID = {}
 gLastReqSent = None
 gPhone1IP = None
+gIceNegotiationLogged = False
 
 def timestamp_url_handler(error, endpoint, values):
     # build the url to use in the timestamp link in the message flow table. The Flask Table package uses
@@ -66,11 +67,18 @@ app.url_build_error_handlers.append(timestamp_url_handler)
 SipProxyLegSet = set()
 ProxyNamedTuple = namedtuple('ProxyNamedTuple', 'this individNum direction fromNettle toNettle previousHopIP nextHopIP')
 
+# These classes should match the class names add to convert.js and used in sequence-diagram.css. They are used to
+# draw the arrow with specific color and stroke, and to color the text red if an error.
+sipclass = "sipmsg"
+siperrorclass = "siperror"
+mediaclass = "media"
+mediaremovalclass = "media-removal"
+icemediaclass = "ice-media"
 
 
 class Log:
     def __init__(self, this='', timestamp='', shortLog='', longLog='', direction='', rawTimestamp=None,
-                 currLineNum=None, srcEntity='', logType=''):
+                 currLineNum=None, srcEntity='', logType=sipclass):
         self.this      = this
         if rawTimestamp is not None:
             # Caller already converted the timestamp
@@ -94,7 +102,7 @@ class Log:
 
 
 gPrevTimestamp = " "
-gSeq = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+gSeq = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 gSeqIdx = 0
 
 def getTimestamp(timestamp):
@@ -1257,11 +1265,12 @@ p_from = compile('From: <sip:{fromuri:S}>;tag={fromtag:S}')
 p_cline = compile('c=IN IP4 {cip:S}')
 p_mline = compile('m={media:w} {port:d} {mediatype:S}')
 p_rtcp = compile('a=rtcp:{port:d}')
+p_candidate = compile('a=candidate:1 1 UDP {id:d} {ip:S} {port:d} typ {type:w}')
 p_remotecandidates = compile('a=remote-candidates:{comp1:d} {remoteIP1:S} {remotePort1:d} {comp2:d} {remoteIP2:S} {remotePort2:d}')
 
 
 def parse_networkSipDebug(line, f):
-    global gLogList, gPortAssignment, gB2buaPortAssignment,  gCurrLinenum, gCallIDMap, gCucmIP, gPhone1IP, gExpEIP, gCallIDtoSessionID, gCallIDtoRemoteSessionID
+    global gLogList, gPortAssignment, gB2buaPortAssignment,  gCurrLinenum, gCallIDMap, gCucmIP, gPhone1IP, gExpEIP, gCallIDtoSessionID, gCallIDtoRemoteSessionID, gIceNegotiationLogged
 
     direction = 'sent'
     r = p_networkSipReceivedDebug.parse(line)
@@ -1301,6 +1310,7 @@ def parse_networkSipDebug(line, f):
     srcEntity = None
     viaIsCucm = False
     routeIsCucm = False
+    localCandidateIP = None
     msgType = 'Unknown'
     callFlowLocation = '????'
     msgTypeTimestamp = getTimestamp(timestamp)
@@ -1392,7 +1402,9 @@ def parse_networkSipDebug(line, f):
                 fromCUCM = True
             elif 'b2bua' in line:
                 fromB2BUA = True
-            elif 'TANDBERG' in line:
+            elif 'TANDBERG' in line and "Cisco-" not in line:
+                # Tandberg endpoints and proxy code include TANDBERG in the User-Agent/Server header. Endpoints
+                # include the device type (e.g. Cisco-DX70)
                 fromProxy = True
 
         # Grab the IP address in the Contact header. We can use this to identify the first phone using the first
@@ -1520,7 +1532,7 @@ def parse_networkSipDebug(line, f):
 
 
         if line == "a=inactive" or line == "a=sendonly" or line == "a=recvonly":
-            operation = '  ' + line
+            operation = '   ' + line
             gLogList.append(Log(logId, timestamp, operation, line))
             continue
         if ";apparent" in line:
@@ -1558,14 +1570,24 @@ def parse_networkSipDebug(line, f):
             aline = '   ' + line
             gLogList.append(Log(logId, timestamp, aline, line))
             continue
+        r = p_candidate.search(line)
+        if r is not None:
+            # Save local candidate in case we need it for remote candidate below
+            localCandidateIP = r['ip']
         r = p_remotecandidates.search(line)
         if r is not None:
             aline = '   a=remote-candidates:'
             gLogList.append(Log(logId, timestamp, aline, line))
-            aline = '    ' + str(r['comp1']) + ' ' + r['remoteIP1'] + ':' + str(r['remotePort1'])
-            gLogList.append(Log(logId, timestamp, aline, line))
-            aline = '    ' + str(r['comp2']) + ' ' + r['remoteIP2'] + ':' + str(r['remotePort2'])
-            gLogList.append(Log(logId, timestamp, aline, line))
+            aline1 = '    ' + str(r['comp1']) + ' ' + r['remoteIP1'] + ':' + str(r['remotePort1'])
+            gLogList.append(Log(logId, timestamp, aline1, line))
+            aline2 = '    ' + str(r['comp2']) + ' ' + r['remoteIP2'] + ':' + str(r['remotePort2'])
+            gLogList.append(Log(logId, timestamp, aline2, line))
+            if not isRequest:
+                # On 200OK we mark the media as established between the 2 endpoints. Only include it in the logs once
+                # so we don't have too much clutter
+                if localCandidateIP is not None and not gIceNegotiationLogged:
+                    gLogList.append(Log(localCandidateIP, timestamp, shortLog=aline1, logType=icemediaclass, srcEntity=r['remoteIP1']))
+                    gIceNegotiationLogged = True
             continue
 
     # Add the req method or resp code that we saved above. Do this here so we have the updated logId so it gets
@@ -2612,6 +2634,7 @@ def initialize(expeFilename, expe2Filename, expcFilename):
     global gExpEIP, gExpCIP, gCucmIP, gExpCInternalIP
     global gPortAssignment, gB2buaPortAssignment, gCallIDMap, gPhone1IP, gLastReqSent
     global gCallIDtoSessionID, gCallIDtoRemoteSessionID
+    global gIceNegotiationLogged
 
     gProxyLegMapE = {}
     gProxyLegMapE2 = {}
@@ -2632,6 +2655,7 @@ def initialize(expeFilename, expe2Filename, expcFilename):
     mediaThreadMapE = {}
     mediaThreadMapC = {}
     mediaThreadMapE2 = {}
+    gIceNegotiationLogged = False
 
     # Table definitions
     gFsmTable = PrettyTable(['Timestamp', 'Source Specie', 'Source ID', 'Dest Specie', 'Dest ID', 'Msg', 'Next State'])
@@ -2967,12 +2991,6 @@ def buildGenus(includeTurn):
     return genus
 
 
-# These classes should match the class names add to convert.js and used in sequence-diagram.css. They are used to
-# draw the arrow with specific color and stroke, and to color the text red if an error.
-sipclass = "sipmsg"
-siperrorclass = "siperror"
-mediaclass = "media"
-mediaremovalclass = "media-removal"
 
 def getExpEMediaLogs(proxyList, routeMapE):
     global gExpEIP, gPortAssignment
@@ -3173,103 +3191,123 @@ def buildSequenceDiagram(includeTurn):
 
         # Search for the phone IPs or entity sides. "In" and "Out" are relative to the direction of the initial INIVTE
         # which is always left to right.
-        elif log.this in phone1set:
-            if log.direction == 'rcvd':
-                sd.action(log.this, proxy0Entity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy0Entity, log.this, sipclass, log.shortLog, log.filename, log.linenum)
-        elif log.this in phone2set:
-            if log.direction == 'rcvd':
-                sd.action(log.this, proxy5Entity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy5Entity, log.this, sipclass, log.shortLog, log.filename, log.linenum)
-        elif log.this == 'b2bua1in':
-            if log.direction == 'rcvd':
-                sd.action(proxy1Entity, b2bua1Entity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(b2bua1Entity, proxy1Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        elif log.this == 'b2bua1out':
-            if log.direction == 'rcvd':
-                sd.action(proxy2Entity, b2bua1Entity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(b2bua1Entity, proxy2Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        elif log.this == 'b2bua2in':
-            if log.direction == 'rcvd':
-                sd.action(proxy3Entity, b2bua2Entity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(b2bua2Entity, proxy3Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        elif log.this == 'b2bua2out':
-            if log.direction == 'rcvd':
-                sd.action(proxy4Entity, b2bua2Entity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(b2bua2Entity, proxy4Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        elif log.this == 'cucmIn':
-            if log.direction == 'sent':
-                sd.action(proxy2Entity, cucmEntity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'rcvd':
-                sd.action(cucmEntity, proxy2Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        elif log.this == 'cucmOut':
-            if log.direction == 'sent':
-                sd.action(proxy3Entity, cucmEntity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'rcvd':
-                sd.action(cucmEntity, proxy3Entity, sipclass, log.shortLog, log.filename, log.linenum)
+        elif "sip" in log.logType:
+            if log.this in phone1set:
+                if log.direction == 'rcvd':
+                    sd.action(log.this, proxy0Entity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(proxy0Entity, log.this, sipclass, log.shortLog, log.filename, log.linenum)
+            elif log.this in phone2set:
+                if log.direction == 'rcvd':
+                    sd.action(log.this, proxy5Entity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(proxy5Entity, log.this, sipclass, log.shortLog, log.filename, log.linenum)
+            elif log.this == 'b2bua1in':
+                if log.direction == 'rcvd':
+                    sd.action(proxy1Entity, b2bua1Entity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(b2bua1Entity, proxy1Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            elif log.this == 'b2bua1out':
+                if log.direction == 'rcvd':
+                    sd.action(proxy2Entity, b2bua1Entity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(b2bua1Entity, proxy2Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            elif log.this == 'b2bua2in':
+                if log.direction == 'rcvd':
+                    sd.action(proxy3Entity, b2bua2Entity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(b2bua2Entity, proxy3Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            elif log.this == 'b2bua2out':
+                if log.direction == 'rcvd':
+                    sd.action(proxy4Entity, b2bua2Entity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(b2bua2Entity, proxy4Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            elif log.this == 'cucmIn':
+                if log.direction == 'sent':
+                    sd.action(proxy2Entity, cucmEntity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'rcvd':
+                    sd.action(cucmEntity, proxy2Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            elif log.this == 'cucmOut':
+                if log.direction == 'sent':
+                    sd.action(proxy3Entity, cucmEntity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'rcvd':
+                    sd.action(cucmEntity, proxy3Entity, sipclass, log.shortLog, log.filename, log.linenum)
 
-        # elif log.this == 'proxy0in':
-        #     if log.direction == 'rcvd':
-        #         sd.action(phone1Entity, proxy0Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        #     elif log.direction == 'sent':
-        #         sd.action(proxy0Entity, phone1Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        elif log.this == 'proxy0out':
-            if log.direction == 'rcvd':
-                sd.action(log.srcEntity, proxy0Entity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy0Entity, proxy1Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        elif log.this == 'proxy5in':
-            if log.direction == 'rcvd':
-                sd.action(log.srcEntity, proxy5Entity, sipclass, log.shortLog, log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy5Entity, proxy4Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        # elif log.this == 'proxy5out':
-        #     if log.direction == 'rcvd':
-        #         sd.action(phone2Entity, proxy5Entity, sipclass, log.shortLog, log.filename, log.linenum)
-        #     elif log.direction == 'sent':
-        #         sd.action(proxy5Entity, phone2Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            # elif log.this == 'proxy0in':
+            #     if log.direction == 'rcvd':
+            #         sd.action(phone1Entity, proxy0Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            #     elif log.direction == 'sent':
+            #         sd.action(proxy0Entity, phone1Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            elif log.this == 'proxy0out':
+                if log.direction == 'rcvd':
+                    sd.action(log.srcEntity, proxy0Entity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(proxy0Entity, proxy1Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            elif log.this == 'proxy5in':
+                if log.direction == 'rcvd':
+                    sd.action(log.srcEntity, proxy5Entity, sipclass, log.shortLog, log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(proxy5Entity, proxy4Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            # elif log.this == 'proxy5out':
+            #     if log.direction == 'rcvd':
+            #         sd.action(phone2Entity, proxy5Entity, sipclass, log.shortLog, log.filename, log.linenum)
+            #     elif log.direction == 'sent':
+            #         sd.action(proxy5Entity, phone2Entity, sipclass, log.shortLog, log.filename, log.linenum)
 
-        elif log.this == 'proxy1in':
-            if log.direction == 'rcvd':
-                sd.action(log.srcEntity, proxy1Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy1Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+        elif log.logType == icemediaclass:
+            # This is the direct media connection between the 2 endpoints
+            sd.action(log.this, log.srcEntity, log.logType, log.shortLog, log.filename, log.linenum)
+            sd.action(log.srcEntity, log.this, log.logType, log.shortLog, log.filename, log.linenum)
 
-        elif log.this == 'proxy4out':
-            if log.direction == 'rcvd':
-                sd.action(log.srcEntity, proxy4Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy4Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
 
-        elif log.this == 'turn1in' and includeTurn:
-            if log.direction == 'rcvd':
-                sd.action(log.srcEntity, proxy0Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy0Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+        elif "media" in log.logType:
+            if log.this == 'proxy1in':
+                if log.direction == 'rcvd':
+                    sd.action(log.srcEntity, proxy1Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(proxy1Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
 
-        elif log.this == 'turn1out' and includeTurn:
-            if log.direction == 'rcvd':
-                sd.action(turn1Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(log.srcEntity, turn1Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+            elif log.this == 'proxy4out':
+                if log.direction == 'rcvd':
+                    sd.action(log.srcEntity, proxy4Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(proxy4Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
 
-        elif log.this == 'turn2out' and includeTurn:
-            if log.direction == 'rcvd':
-                sd.action(log.srcEntity, proxy5Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(proxy5Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+            elif log.this == 'b2bua1in':
+                if log.direction == 'rcvd':
+                    sd.action(log.srcEntity, b2bua1Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(b2bua1Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
 
-        elif log.this == 'turn2in' and includeTurn:
-            if log.direction == 'rcvd':
-                sd.action(turn2Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
-            elif log.direction == 'sent':
-                sd.action(log.srcEntity, turn2Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+            elif log.this == 'b2bua2out':
+                if log.direction == 'rcvd':
+                    sd.action(log.srcEntity, b2bua2Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(b2bua2Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+            elif log.this == 'turn1in' and includeTurn:
+                if log.direction == 'rcvd':
+                    sd.action(log.srcEntity, proxy0Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(proxy0Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+            elif log.this == 'turn1out' and includeTurn:
+                if log.direction == 'rcvd':
+                    sd.action(turn1Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(log.srcEntity, turn1Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+            elif log.this == 'turn2out' and includeTurn:
+                if log.direction == 'rcvd':
+                    sd.action(log.srcEntity, proxy5Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(proxy5Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+
+            elif log.this == 'turn2in' and includeTurn:
+                if log.direction == 'rcvd':
+                    sd.action(turn2Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
+                elif log.direction == 'sent':
+                    sd.action(log.srcEntity, turn2Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
 
 
 
@@ -3432,8 +3470,8 @@ def upload_file():
         # table = MsgFlowTable(listOfRows, html_attrs={'frame': 'border', 'rules': 'cols'})
         # htmlMsgTable = Markup(table.__html__())
         # return render_template('ajax_layout.html', flow=htmlMsgTable)
-        flow = buildSequenceDiagram(gProxyList)
-        genus = buildGenus(True)
+        flow = buildSequenceDiagram(False)
+        genus = buildGenus(False)
         return render_template('ajax_layout.html', flow=Markup(flow), genus=Markup(genus))
 
 @app.route('/check_log_levels')

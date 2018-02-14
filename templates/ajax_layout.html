@@ -195,6 +195,7 @@
                 $.get('/load_table', function(data) {
                     $(".ui-layout-center").html(data);
                     $('.top-header').html(' ');
+                    $('.genus-header').html(' ');
                     $('a').bind('click', function(event)
                     {
                         get_file_snippet(event)
@@ -223,19 +224,6 @@
 					}
 				});
 			});
-            $('#load_sequence_diagram2').submit('click', function()
-            {
-                $.get('/load_sequence_diagram', function(data) {
-                    $(".ui-layout-center").html(data['flow']);
-                    $(".genus-header").html(data['genus']);
-                    header = $('.header').html();
-                    $('.top-header').html(header);
-                    $('a').bind('click', function(event)
-                    {
-                        get_file_snippet(event)
-                    });
-                });
-            });
         });
 
         $(function()
@@ -299,7 +287,7 @@
 				<form id="load_sequence_diagram" action="/load_sequence_diagram">
 					<button type="submit">Sequence Diagram</button>
 					<input type="checkbox" id="includeTurn" name="includeTurn" value="yes">
-					<label for="includeTurn" style="font-size: small;">Include TURN</label>
+					<label for="includeTurn" style="font-size: small;">Include Media</label>
 				</form>
 			</div>
 		</fieldset>

@@ -115,7 +115,7 @@ for {
 }
 
 /* Bud - my classes to control the line and text colors based on the type of signal */
-.media {
+.media, .ice-media {
     stroke: green;
     fill:   green;
 }
