@@ -380,7 +380,7 @@ def parse_turnRoutingDeleteOutgoing(line, routeMap):
 
 p_epollin = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/media_forwarding_framework.cpp({line:d})" Method="media_forwarding_framework::handle_events" Thread="{thread:S}": Handle EPOLLIN event for fd: {fd:d}')
 
-p_readDataAvailable1 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": Read UDP packet - socket description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {hself:S}, m_uprhandle = {upr:S}, bound addr == [{rxip:S}]:{rxport:S}')
+p_readDataAvailable1 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": Read UDP packet - socket description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{rxip:S}]:{rxport:S}')
 
 p_readDataAvailable2 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": received from: [{fromip:S}]:{fromport:d}')
 
@@ -388,7 +388,7 @@ p_packetMatchesRoute = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {
 
 p_forwardPacket = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/unidirectional_packet_router.cpp({line:d})" Method="unidirectional_packet_router::forwardPacket" Thread="{thread:S}": Actually send the packet')
 
-p_sendPacketOnWire = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::sendPacketOnWire" Thread="{thread:S}": Send UDP data, description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {hself:S}, m_uprhandle = {upr:S}, bound addr == [{txip:S}]:{txport:d}')
+p_sendPacketOnWire = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/{file:w}.cpp({line:d})" Method="{class:w}::sendPacketOnWire" Thread="{thread:S}": Send UDP data, description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{txip:S}]:{txport:d}')
 
 # Track the individual media handler threads and associate the file descriptors each thread is managing
 class MediaThread:
@@ -422,14 +422,16 @@ def getMediaThreadTable(mediaThreadMap):
     return table
 
 class PacketRelayConnection:
-    def __init__(self, timestamp='', rxFD='', fromIP='', fromPort='', rxIP='', rxPort='', txFD='', txIP='', txPort='', toIP='', toPort='', numTries=0, numTries2=0, numTries3=0):
+    def __init__(self, timestamp='', rxFD='', rxSocket='', fromIP='', fromPort='', rxIP='', rxPort='', txFD='', txSocket='', txIP='', txPort='', toIP='', toPort='', numTries=0, numTries2=0, numTries3=0):
         self.timestamp = getTimestamp(timestamp)
         self.rxFD     = rxFD
+        self.rxSocket = rxSocket
         self.fromIP   = fromIP
         self.fromPort = fromPort
         self.rxIP     = rxIP
         self.rxPort   = rxPort
         self.txFD     = txFD
+        self.txSocket = txSocket
         self.txIP     = txIP
         self.txPort   = txPort
         self.toIP     = toIP
@@ -453,6 +455,7 @@ def parse_readDataAvailable(line, f, packetRelayMap):
     rxFD   = str(r['fd'])
     rxIP   = r['rxip']
     rxPort = str(r['rxport'])
+    rxSocket = r['socket']
     timestamp = r['timestamp2']
 
     line = f.next()
@@ -478,7 +481,7 @@ def parse_readDataAvailable(line, f, packetRelayMap):
             break
 
     if r is None:
-        # This is an expected case, happens when we receive a packet but the rout isn't set up yet
+        # This is an expected case, happens when we receive a packet but the route isn't set up yet
         #print "*** parse_readDataAvailable: Didn't get forwardPacket log"
         #print line
         return True
@@ -489,41 +492,60 @@ def parse_readDataAvailable(line, f, packetRelayMap):
     txFD = ''
     txIP = ''
     txPort = ''
+    txSocket = ''
     if r is not None:
         txFD   = str(r['fd'])
         txIP   = r['txip']
         txPort = str(r['txport'])
+        txSocket = r['socket']
 
     key = rxFD + rxPort + txFD + txPort
     prc = packetRelayMap.get(key)
     if prc is None:
-        prc = PacketRelayConnection(timestamp, rxFD, fromIP, fromPort, rxIP, rxPort, txFD, txIP, txPort, '', '', numTries)
+        prc = PacketRelayConnection(timestamp, rxFD, rxSocket, fromIP, fromPort, rxIP, rxPort, txFD, txSocket, txIP, txPort, '', '', numTries)
         packetRelayMap[key] = prc
     prc.newPacket(timestamp, numTries)
     return True
 
-def scrubPacketRelayData(packetRelayMap):
+def scrubPacketRelayData(packetRelayMap, routeMap):
     # Fill in the rightSocket's toIP and toPort using the fromIP and fromPort of that same socket when its on the left.
-    for rightSocket in packetRelayMap.values():
+    # The toIP and toPort are not given to us in the logs, so we need to scan the route map to find which IP and port
+    # the packets are sent to.
+    #git
+    # Note that we cannot use the packet relay map itself to get this info because you can have an incoming socket that
+    # receives from ANY, and might receive from the phones local port, but send to a relay port (e.g. 24000). Thus,
+    # it is better to scan the route table looking for the port to fill in.
+
+    for packetRelayEntry in packetRelayMap.values():
         # Skip entries where I think probes are being exchanged
-        if rightSocket.rxFD == rightSocket.txFD:
+        if packetRelayEntry.rxFD == packetRelayEntry.txFD:
             continue
-        for leftSocket in packetRelayMap.values():
-            if leftSocket.rxFD == leftSocket.txFD:
-                continue
-            if leftSocket.rxFD == rightSocket.txFD and leftSocket.txFD == rightSocket.rxFD:
-                # We have a match
-                rightSocket.toIP = leftSocket.fromIP
-                rightSocket.toPort = leftSocket.fromPort
+        done = False
+        for route in routeMap.values():
+            if route.socket1 == packetRelayEntry.txSocket:
+                for event in route.event:
+                    if event.extIP1 != 'undef' and event.extPort1 != 'undef':
+                        packetRelayEntry.toIP = event.extIP1
+                        packetRelayEntry.toPort = event.extPort1
+                        done = True
+                        break
+            elif route.socket2 == packetRelayEntry.txSocket:
+                for event in route.event:
+                    if event.extIP2 != 'undef' and event.extPort2 != 'undef':
+                        packetRelayEntry.toIP = event.extIP2
+                        packetRelayEntry.toPort = event.extPort2
+                        done = True
+                        break
+            if done:
+                break;
 
-    # Not build a new table that shows end-to-end packet routing
 
-def getPacketRelayTable(packetRelayMap):
+def getPacketRelayTable(packetRelayMap, routeMap):
     # Fill in additional fields in the map that don't come from the logs
-    scrubPacketRelayData(packetRelayMap)
-    packetRelayTable = PrettyTable(['Timestamp', 'fromIP', 'fromPort', 'rxIP', 'rxPort', 'rxFD', 'txFD', 'txPort', 'txIP', 'toPort', 'toIP', 'numPackets', 'maxTries'])
+    scrubPacketRelayData(packetRelayMap, routeMap)
+    packetRelayTable = PrettyTable(['Timestamp', 'fromIP', 'fromPort', 'rxIP', 'rxPort', 'rxFD', 'rxSocket', 'txSocket', 'txFD', 'txPort', 'txIP', 'toPort', 'toIP', 'numPackets'])
     for pt in packetRelayMap.values():
-        packetRelayTable.add_row([pt.timestamp, pt.fromIP, pt.fromPort, pt.rxIP, pt.rxPort, pt.rxFD, pt.txFD, pt.txPort, pt.txIP, pt.toPort, pt.toIP, pt.numPackets, pt.maxTries])
+        packetRelayTable.add_row([pt.timestamp, pt.fromIP, pt.fromPort, pt.rxIP, pt.rxPort, pt.rxFD, pt.rxSocket, pt.txSocket, pt.txFD, pt.txPort, pt.txIP, pt.toPort, pt.toIP, pt.numPackets])
     return packetRelayTable
 
 
@@ -562,6 +584,14 @@ class ProxyLeg:
             return ''
         else:
             return self.sessionID + self.remoteSessionID
+
+def updateProxyLegRemoteSessionID(callID, remoteSessionID):
+    # In case we get a new remoteSessionID but have already processed the getRequiredLicenseType log which is where
+    # we map the callid to the proxy leg and update the session ID, update the remote session ID here.
+    global gProxyLegMap
+    for proxyLeg in gProxyLegMap.values():
+        if proxyLeg.callID == callID and proxyLeg.remoteSessionID is None:
+            proxyLeg.remoteSessionID = remoteSessionID
 
 class Proxy:
     def __init__(self, num=0, inboundLeg='', outboundLeg='',
@@ -626,7 +656,7 @@ def getCall(sessionID, remoteSessionID):
 #p_inboundNettleAndSrcIP = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" {codeLocation} Method="SipProxyLeg::SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Set mNettleLeg="{nettleLeg}" origIngressZoneId="{origZoneId}" from origin="{fromIP}:{fromPort}"')
 p_inboundNettleAndSrcIP = compile('Method="SipProxyLeg::SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Set mNettleLeg="{nettleLeg}" origIngressZoneId="{origZoneId}" from origin="{fromIP}:{fromPort}"')
 
-p_ProcessInviteRequest = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processInviteRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}')
+p_ProcessInviteRequest = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processInviteRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId:d}')
 
 p_inboundProcessInitialRequest = compile('Method="SipProxyLeg::processInitialRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated=YES')
 #p_inboundProcessInitialRequest = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processInitialRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated=YES')
@@ -1029,7 +1059,7 @@ def parse_outboundRouteViaNettle(line):
         return True
 
 def parse_getRequiredLicensingType(line):
-    # We use this log to associate the SIP Call-ID to the proxy leg
+    # We use this log to associate the SIP Call-ID to the proxy leg and update the session IDs for the proxy leg
     r = p_getRequiredLicensingType.parse(line)
     if r is None:
         return False
@@ -1371,7 +1401,7 @@ def parse_networkSipDebug(line, f):
             if not isRequest and gCallIDtoRemoteSessionID.get(callid) is None and sessionId != '00000000000000000000000000000000':
                 # Get the session ID in the response direction once allocated; e.g., 100 Trying does not allocate it so will be all zeros
                 gCallIDtoRemoteSessionID[callid] = sessionId
-
+                updateProxyLegRemoteSessionID(callid, sessionId)
 
 
         # Add CSeq info to the message type (e.g. 100 Trying (CSeq 101))
@@ -1787,19 +1817,6 @@ def parseFile(filename, routeMap, mediaThreadMap, packetRelayMap):
             currentMsg = None
             continue
 
-        # Check for SIP messages off the wire
-        # if parse_networkSipReceivedReq(line):
-        #     #print '  matched networkSipReceivedReq'
-        #     continue
-        # if parse_networkSipReceivedResp(line):
-        #     #print '  matched networkSipReceivedResp'
-        #     continue
-        # if parse_networkSipSentReq(line):
-        #     #print '  matched networkSipSentReq'
-        #     continue
-        # if parse_networkSipSentResp(line):
-        #     #print '  matched networkSipSentResp'
-        #     continue
         if parse_networkSipDebug(line, f):
             continue
 
@@ -1874,12 +1891,12 @@ def parseFile(filename, routeMap, mediaThreadMap, packetRelayMap):
         # This was previously search only if currentMsg is SIPTrans_Ind but ran into a case where we saw this log
         #  without the SIPTrans_Ind execution before it.
         if parse_inboundNettleAndSrcIP(line):
-            #print "  matched inboundNettleAndSrcIP"
+            print "  matched inboundNettleAndSrcIP"
             continue
         # Check for SipProxyLeg logs that appear when the message dispatcher is running
         #if currentMsg == "SIPTrans_Ind":
         if parse_ProcessInviteRequest(line):
-            #print "  matched ProcessInviteRequest"
+            print "  matched ProcessInviteRequest"
             continue
         if parse_apparent(line):
             #print "  matched apparent"
@@ -1901,11 +1918,11 @@ def parseFile(filename, routeMap, mediaThreadMap, packetRelayMap):
         # Check to see if we're in the middle of INBOUND message execution
         if currentMsg == "ProcessInviteRequest" or currentMsg == "ProcessNonInviteRequest":
             if parse_inboundProcessInitialRequest(line, currentIndividNum, currentMsg):
-                #print "  matched inboundProcessInitialRequest"
+                print "  matched inboundProcessInitialRequest"
                 continue
         if currentMsg == "ProcessNonInviteRequest":
             if parse_ProcessSubsequentRequest(line):
-                #print "  matched ProcessSubsequentRequest"
+                print "  matched ProcessSubsequentRequest"
                 continue
 
     f.close()
@@ -2698,7 +2715,7 @@ def initialize(expeFilename, expe2Filename, expcFilename):
             print mtE.get_string(sortby="Timestamp")
             print
             print "PACKET RELAY TABLE E"
-            ptE = getPacketRelayTable(gPacketRelayMapE)
+            ptE = getPacketRelayTable(gPacketRelayMapE, routeMapE)
             print ptE.get_string(sortby="Timestamp")
             print "Size: " + str(len(gPacketRelayMapE))
 
@@ -2728,7 +2745,7 @@ def initialize(expeFilename, expe2Filename, expcFilename):
             print mtE.get_string(sortby="Timestamp")
             print
             print "PACKET RELAY TABLE E2"
-            ptE = getPacketRelayTable(gPacketRelayMapE2)
+            ptE = getPacketRelayTable(gPacketRelayMapE2, routeMapE)
             print ptE.get_string(sortby="Timestamp")
             print "Size: " + str(len(gPacketRelayMapE2))
 
@@ -2761,7 +2778,7 @@ def initialize(expeFilename, expe2Filename, expcFilename):
             print mtE.get_string(sortby="Timestamp")
             print
             print "PACKET RELAY TABLE C"
-            ptE = getPacketRelayTable(gPacketRelayMapC)
+            ptE = getPacketRelayTable(gPacketRelayMapC, routeMapC)
             print ptE.get_string(sortby="Timestamp")
             print "Size: " + str(len(gPacketRelayMapC))
 
@@ -3260,7 +3277,7 @@ def buildSequenceDiagram(includeTurn):
             sd.action(log.srcEntity, log.this, log.logType, log.shortLog, log.filename, log.linenum)
 
 
-        elif "media" in log.logType:
+        elif "media" in log.logType and includeTurn:
             if log.this == 'proxy1in':
                 if log.direction == 'rcvd':
                     sd.action(log.srcEntity, proxy1Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
@@ -3285,25 +3302,25 @@ def buildSequenceDiagram(includeTurn):
                 elif log.direction == 'sent':
                     sd.action(b2bua2Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
 
-            elif log.this == 'turn1in' and includeTurn:
+            elif log.this == 'turn1in':
                 if log.direction == 'rcvd':
                     sd.action(log.srcEntity, proxy0Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
                 elif log.direction == 'sent':
                     sd.action(proxy0Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
 
-            elif log.this == 'turn1out' and includeTurn:
+            elif log.this == 'turn1out':
                 if log.direction == 'rcvd':
                     sd.action(turn1Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
                 elif log.direction == 'sent':
                     sd.action(log.srcEntity, turn1Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
 
-            elif log.this == 'turn2out' and includeTurn:
+            elif log.this == 'turn2out':
                 if log.direction == 'rcvd':
                     sd.action(log.srcEntity, proxy5Entity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
                 elif log.direction == 'sent':
                     sd.action(proxy5Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
 
-            elif log.this == 'turn2in' and includeTurn:
+            elif log.this == 'turn2in':
                 if log.direction == 'rcvd':
                     sd.action(turn2Entity, log.srcEntity, log.logType, log.longLog.replace(' ', '&nbsp').replace('<', '&lt'), log.filename, log.linenum)
                 elif log.direction == 'sent':
@@ -3439,15 +3456,18 @@ def upload_file():
             gExpEIP, gExpCIP, gCucmIP, gExpCInternalIP = gIpMap[request.form.get('deployment')]
         else:
             # Custom deployment
-            gExpEIP = request.form.ipE
-            gExpCIP = request.form.ipC
-            gCucmIP = request.form.ipCucm
+            gExpEIP = request.form.get('ipE')
+            gExpCIP = request.form.get('ipC')
+            gCucmIP = request.form.get('ipCucm')
+
+            if gExpEIP is None or gExpCIP is None or gCucmIP is None:
+                return 'If you are manually entering IP addresses, you must specify an Expressway-E IP address, an Expressway-C IP address, and a CUCM IP address. The Internal Expressway-C address is only needed if you have a NATed configuration where the Expressway-C has a different internal IP address.'
 
             # Check if they gave us an IP address for the internal ExpC
             try:
-                socket.inet_aton(request.form.ipInternalC)
+                socket.inet_aton(request.form.get('ipInternalC'))
                 # legal IP
-                gExpCInternalIP = request.form.ipCucm
+                gExpCInternalIP = request.form.get('ipInternalC')
             except socket.error:
                 # illegal IP, assume not needed
                 gExpCInternalIP = None
@@ -3504,19 +3524,19 @@ def get_media_route_c():
 
 @app.route('/get_packet_relay_info_e')
 def get_packet_relay_info_e():
-    global gPacketRelayMapE, gPacketRelayMapE2
+    global gPacketRelayMapE, gPacketRelayMapE2, gRouteMapE
     data = "EXPRESSWAY-E PACKET RELAY\n"
-    ptE = getPacketRelayTable(gPacketRelayMapE)
+    ptE = getPacketRelayTable(gPacketRelayMapE, gRouteMapE)
     data += ptE.get_string(sortby="Timestamp")
     data += "\n\nEXPRESSWAY-E2 PACKET RELAY\n"
-    ptE = getPacketRelayTable(gPacketRelayMapE2)
+    ptE = getPacketRelayTable(gPacketRelayMapE2, gRouteMapE)
     data += ptE.get_string(sortby="Timestamp")
     return '<pre>' + data + '</pre>'
 
 @app.route('/get_packet_relay_info_c')
 def get_packet_relay_info_c():
-    global gPacketRelayMapC
-    ptE = getPacketRelayTable(gPacketRelayMapC)
+    global gPacketRelayMapC, gRouteMapC
+    ptE = getPacketRelayTable(gPacketRelayMapC, gRouteMapC)
     data = "EXPRESSWAY-C PACKET RELAY\n"
     data += ptE.get_string(sortby="Timestamp")
     return '<pre>' + data + '</pre>'

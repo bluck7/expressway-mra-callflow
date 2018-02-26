@@ -76,9 +76,42 @@
             margin: 5px;
             line-height: 10px
         }
+
+        /* Start by setting display:none to make this hidden.
+           Then we position it in relation to the viewport window
+           with position:fixed. Width, height, top and left speak
+           for themselves. Background we set to 80% white with
+           our animation centered, and no-repeating */
+        .modal {
+            display:    none;
+            text-align: center;
+            vertical-align: middle;
+            position:   fixed;
+            z-index:    1000;
+            top:        0;
+            left:       0;
+            height:     100%;
+            width:      100%;
+            background: rgba( 255, 255, 255, .5 )
+                        url('http://i.stack.imgur.com/FhHRx.gif')
+                        50% 50%
+                        no-repeat;
+        }
     </style>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
     <script>
+        $body = $("body");
+        /*
+        $(document).on({
+            ajaxStart: function() { $body.addClass("loading");    },
+             ajaxStop: function() { $body.removeClass("loading"); }
+        });
+        */
+
+        function show_slow_warning() {
+          $("#slow_warning").show();
+        }
+
         $(function() {
             $('#deployment').bind('click', function() {
             });
@@ -86,6 +119,16 @@
 
         $(function()
         {
+            /*
+            $('#form').submit(function() {
+                $('#wait').show()
+                $.post('/uploader', function() {
+                    $('#wait').hide();
+                });
+                return false;
+            });
+            */
+
             $('#exp_e_logs').click(function() {
                 $('#exp_e_logger').toggle()
             });
@@ -98,8 +141,13 @@
 </head>
 <body>
     <h1>Expressway Mobile Remote Access (MRA) Log Analyzer</h1>
+
+    <div id="slow_warning" class="modal" style="display:none">
+        Loading...
+    </div>
+
     <div style="margin-left: 10px">
-        <form action = "/uploader" method = "POST" enctype="multipart/form-data">
+        <form id="form" action = "/uploader" method = "POST" enctype="multipart/form-data" onsubmit="show_slow_warning()">
             <fieldset>
                 <legend>Testbed</legend>
                 <div style="margin-left: 5px">
@@ -171,10 +219,11 @@
                     <p>Expressway-E Logger Commands</p>
                     <pre>
     xConfiguration Logger Developer developer.management.trafficserver Level: DEBUG
-    xConfiguration Logger Developer developer.media Level: DEBUG
     xConfiguration Logger Developer developer.mediasessionmgr Level: DEBUG
     xConfiguration Logger Developer developer.mediasessionmgr.mediasession Level: DEBUG
     xConfiguration Logger Developer developer.mediarouting.core Level: TRACE
+    xConfiguration Logger Developer developer.media.sessionmanager Level: DEBUG
+    xConfiguration Logger Developer developer.media.sessionmanager.mediasession Level: DEBUG
     xConfiguration Logger Developer developer.sip.leg Level: DEBUG
     xConfiguration Logger Network network.mediarouting Level: DEBUG
     xConfiguration Logger Network network.sip Level: DEBUG
@@ -192,7 +241,6 @@
     xConfiguration Logger Developer developer.fsm.sipproxylegfsm Level: TRACE
     xConfiguration Logger Developer developer.fsm.sipproxymsgdspfsm Level: TRACE
     xConfiguration Logger Developer developer.management.trafficserver Level: DEBUG
-    xConfiguration Logger Developer developer.media Level: DEBUG
     xConfiguration Logger Developer developer.media.sessionmanager Level: DEBUG
     xConfiguration Logger Developer developer.media.sessionmanager.mediasession Level: DEBUG
     xConfiguration Logger Developer developer.mediarouting.core Level: TRACE
