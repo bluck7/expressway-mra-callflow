@@ -1886,18 +1886,18 @@ def parseFile(filename, routeMap, mediaThreadMap, packetRelayMap):
             #print "  matched ProcesAckWithSdpRequest"
             continue
         if parse_getRequiredLicensingType(line):
-            print "  matched getRequiredLicensingType"
+            #print "  matched getRequiredLicensingType"
             continue
 
         # This was previously search only if currentMsg is SIPTrans_Ind but ran into a case where we saw this log
         #  without the SIPTrans_Ind execution before it.
         if parse_inboundNettleAndSrcIP(line):
-            print "  matched inboundNettleAndSrcIP"
+            #print "  matched inboundNettleAndSrcIP"
             continue
         # Check for SipProxyLeg logs that appear when the message dispatcher is running
         #if currentMsg == "SIPTrans_Ind":
         if parse_ProcessInviteRequest(line):
-            print "  matched ProcessInviteRequest"
+            #print "  matched ProcessInviteRequest"
             continue
         if parse_apparent(line):
             #print "  matched apparent"
@@ -1919,11 +1919,11 @@ def parseFile(filename, routeMap, mediaThreadMap, packetRelayMap):
         # Check to see if we're in the middle of INBOUND message execution
         if currentMsg == "ProcessInviteRequest" or currentMsg == "ProcessNonInviteRequest":
             if parse_inboundProcessInitialRequest(line, currentIndividNum, currentMsg):
-                print "  matched inboundProcessInitialRequest"
+                #print "  matched inboundProcessInitialRequest"
                 continue
         if currentMsg == "ProcessNonInviteRequest":
             if parse_ProcessSubsequentRequest(line):
-                print "  matched ProcessSubsequentRequest"
+                #print "  matched ProcessSubsequentRequest"
                 continue
 
     f.close()
@@ -2688,7 +2688,7 @@ def initialize(expeFilename, expe2Filename, expcFilename):
     # Proxies are numerically indexed by the order they are created. Each proxy includes both inbound and outbound legs.
     gCallList = []
 
-    verbose = True
+    verbose = False
 
     # ======== Process Exp E logs =========
 
