@@ -180,16 +180,6 @@
 
         $(function()
         {
-            $('#save_data').bind('click', function()
-            {
-                $.get('/save_data', function(data) {
-                    alert(data)
-                });
-            });
-        });
-
-        $(function()
-        {
             $('#load_table').bind('click', function()
             {
                 $.get('/load_table', function(data) {

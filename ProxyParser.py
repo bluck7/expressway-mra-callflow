@@ -4,7 +4,7 @@ from parse import compile
 from collections import namedtuple
 from prettytable import PrettyTable
 from flask_table import Table, Col, LinkCol
-from flask import Flask, render_template, request, Markup, jsonify, escape
+from flask import Flask, render_template, request, Markup, jsonify, session
 from werkzeug.utils import secure_filename
 import pickle
 import re
@@ -20,6 +20,7 @@ UPLOAD_FOLDER = '/Users/bluck/PycharmProjects/expressway-mra-callflow/uploaded_f
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.secret_key = '^8_p;B\wbL!,Mp]Jw(Qw:L=w'
 
 gProxyLegMap = {}
 gProxyLegMapE = {}
@@ -3330,76 +3331,40 @@ def buildSequenceDiagram(includeTurn):
 
     return sd.get_html()
 
-def getTestHtml():
-    html = '''
-    		<sequence-diagram-semantic>
-                <header>
-    				<entity>Alice</entity>
-    				<entity>Bob</entity>
-    				<entity>Carol</entity>
-    				<entity>Dani</entity>
-    			</header>
 
-    			<action><from>Alice</from> says hello to <to>Carol</to></action>
-    			<note><from>Carol</from> is a nice person</note>
-    			<event>
-    				<from>Dani</from> enters:
-    				<pre><code class="lang-json">{"foo": "bar"}</code></pre>
-    			</event>
-
-    			<section>
-    				<title>Second section</title>
-    				<group>
-    					<lifeline><for>Bob</for>'s private conversation</lifeline>
-    					<action><from>Alice</from> talks to <to>Bob</to></action>
-    					<action from="Bob" to="Alice">replies</action>
-    					<group>
-    						<lifeline><from>Bob</from>'s distraction</lifeline>
-    						<action><from>Alice</from> talks to <to>Bob</to></action>
-    						<action><hidden><to>Alice</to></hidden> gets reply <hidden>from <from>Bob</from></hidden></action>
-    					</group>
-    					<action><to>Alice</to> gets conclusion from <from>Bob</from></action>
-    				</group>
-    			</section>
-    		</sequence-diagram-semantic>
-    		<script>sequenceDiagram.convert(document.querySelector(".ui-layout-center.ui-layout-pane.ui-layout-pane-center"))</script>
-        '''
-    return html
-
-
-def save_globals():
+def save_globals(path):
     global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapE2, gPortAssignment, gB2buaPortAssignment
-    with open("calls.dat", "wb") as f:
+    with open(os.path.join(path, "calls.dat"), "wb") as f:
         pickle.dump(gCallList, f)
-    with open("proxy.dat", "wb") as f:
+    with open(os.path.join(path, "proxy.dat"), "wb") as f:
         pickle.dump(gProxyList, f)
-    with open("logs.dat", "wb") as f:
+    with open(os.path.join(path, "logs.dat"), "wb") as f:
         pickle.dump(gLogList, f)
-    with open("ips.dat", "wb") as f:
+    with open(os.path.join(path, "ips.dat"), "wb") as f:
         pickle.dump([gExpEIP, gExpCIP, gCucmIP], f)
-    with open("routemaps.dat", "wb") as f:
+    with open(os.path.join(path, "routemaps.dat"), "wb") as f:
         pickle.dump([gRouteMapE, gRouteMapC], f)
-    with open("packetrelay.dat", "wb") as f:
+    with open(os.path.join(path, "packetrelay.dat"), "wb") as f:
         pickle.dump([gPacketRelayMapE, gPacketRelayMapE2, gPacketRelayMapC], f)
-    with open("portassignments.dat", "wb") as f:
+    with open(os.path.join(path, "portassignments.dat"), "wb") as f:
         pickle.dump([gPortAssignment, gB2buaPortAssignment], f)
 
-def load_globals():
+def load_globals(path):
     global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapE2, gPortAssignment, gB2buaPortAssignment
     try:
-        with open("calls.dat") as f:
+        with open(os.path.join(path, "calls.dat")) as f:
             gCallList = pickle.load(f)
-        with open("proxy.dat") as f:
+        with open(os.path.join(path, "proxy.dat")) as f:
             gProxyList = pickle.load(f)
-        with open("logs.dat") as f:
+        with open(os.path.join(path, "logs.dat")) as f:
             gLogList = pickle.load(f)
-        with open("ips.dat") as f:
+        with open(os.path.join(path, "ips.dat")) as f:
             gExpEIP, gExpCIP, gCucmIP = pickle.load(f)
-        with open("routemaps.dat") as f:
+        with open(os.path.join(path, "routemaps.dat")) as f:
             gRouteMapE, gRouteMapC = pickle.load(f)
-        with open("packetrelay.dat") as f:
+        with open(os.path.join(path, "packetrelay.dat")) as f:
             gPacketRelayMapE, gPacketRelayMapE2, gPacketRelayMapC = pickle.load(f)
-        with open("portassignments.dat") as f:
+        with open(os.path.join(path, "portassignments.dat")) as f:
             gPortAssignment, gB2buaPortAssignment = pickle.load(f)
     except:
         print "Error reading files"
@@ -3432,22 +3397,27 @@ def upload_file():
         if expcFile is None and expeFile is None:
             return 'Please go back and select at least one log file, an Expressway-E log file, an Expressway-C log file or both.'
 
+        # Create a unique directory for this request's files
+        subdir = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+        path = os.path.join(app.config['UPLOAD_FOLDER'], subdir)
+        os.makedirs(path)
+
         # Expressway-E log file
         if expeFile is not None:
             # Save the file locally
-            expeFilename = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(expeFile.filename))
+            expeFilename = os.path.join(path, secure_filename(expeFile.filename))
             expeFile.save(expeFilename)
 
         # Expressway-E 2 log file in case the E is clustered (need to do this for the C as well)
         if expe2File is not None:
             # Save the file locally
-            expe2Filename = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(expe2File.filename))
+            expe2Filename = os.path.join(path, secure_filename(expe2File.filename))
             expe2File.save(expe2Filename)
 
         # Expressway-C log file
         if expcFile is not None:
             # Save the file locally
-            expcFilename = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(expcFile.filename))
+            expcFilename = os.path.join(path, secure_filename(expcFile.filename))
             expcFile.save(expcFilename)
 
         # Set IP addrs
@@ -3480,16 +3450,12 @@ def upload_file():
         print "PROXY TABLE"
         print asciiProxyTable
 
-        # asciiMsgTable = getCallFlowTable(gProxyList, gRouteMapE, gRouteMapC)
-        # print
-        # print "MSG TABLE"
-        # print asciiMsgTable.get_string(sortby="Timestamp")
+        # Save the pertinent data we can use to rebuild the diagram without parsing the files again
+        save_globals(path)
 
-        save_globals()
-        # listOfRows = getListOfMsgFlowRows(gProxyList, gRouteMapE, gRouteMapC)
-        # table = MsgFlowTable(listOfRows, html_attrs={'frame': 'border', 'rules': 'cols'})
-        # htmlMsgTable = Markup(table.__html__())
-        # return render_template('ajax_layout.html', flow=htmlMsgTable)
+        # Save the director of all the particulars as a cookie
+        session['sessionid'] = subdir
+
         flow = buildSequenceDiagram(False)
         genus = buildGenus(False)
         return render_template('ajax_layout.html', flow=Markup(flow), genus=Markup(genus))
@@ -3580,20 +3546,17 @@ def get_ascii_table():
     data += asciiMsgTable.get_string(sortby="Timestamp")
     return '<pre>' + data.replace('<', '&lt') + '</pre>'
 
-@app.route('/save_data')
-def save_table():
-    # Save the currently built table to a well-known file. This could be updated to save multiple tables
-    # with an id, description, date, associated log files, etc.
-    save_globals()
-    print 'Saved!'
-    return 'Success'
-
 @app.route('/load_table')
 def load_table():
     # Load previously saved data from files, build the table, and return the html. Only one saved table can be
     # returned at the moment.
     global gProxyList, gRouteMapE, gRouteMapC
-    load_globals()
+    subdir = session.get('sessionid')
+    if subdir is None:
+        return 'Session not found; start over and resubmit your log files.'
+
+    path = os.path.join(app.config['UPLOAD_FOLDER'], subdir)
+    load_globals(path)
 
     listOfRows = getListOfMsgFlowRows(gProxyList, gRouteMapE, gRouteMapC)
     mtable = MsgFlowTable(listOfRows, html_attrs={'frame': 'border', 'rules': 'cols'})
@@ -3603,7 +3566,12 @@ def load_table():
 def load_sequence_diagram():
     # Load previously saved data from files, build a sequence diagram, and return the html. Only one saved table can be
     # returned at the moment.
-    load_globals()
+    subdir = session.get('sessionid')
+    if subdir is None:
+        return 'Session not found; start over and resubmit your log files.'
+
+    path = os.path.join(app.config['UPLOAD_FOLDER'], subdir)
+    load_globals(path)
     includeTurn = False
     if request.method == 'POST':
         if request.form.get('includeTurn') == 'yes':
