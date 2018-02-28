@@ -238,7 +238,7 @@
                 $(".ui-layout-south").html(data);
 
                 // Wait for pane to finish rendering before manipulating
-                $().ready(function()
+                $(".ui-layout-south").ready(function()
                 {
                 	console.log("Finished appending to .ui-layout-south, waiting for pane to refresh...")
 	                $(".ui-layout-south").scrollTop(0)
