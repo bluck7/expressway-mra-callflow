@@ -3577,9 +3577,12 @@ def load_sequence_diagram():
     # returned at the moment.
     subdir = session.get('sessionid')
     if subdir is None:
-        return 'Session not found; start over and resubmit your log files.'
+        return jsonify(flow='Session not found; start over and resubmit your log files.')
 
     path = os.path.join(app.config['UPLOAD_FOLDER'], subdir)
+    if not os.path.exists(path):
+        return jsonify(flow='Context not found; start over and resubmit your log files.')
+
     load_globals(path)
     includeTurn = False
     if request.method == 'POST':
