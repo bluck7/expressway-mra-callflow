@@ -11,6 +11,7 @@ import re
 import sys
 import socket
 import requests
+import shutil
 
 
 
@@ -3396,6 +3397,14 @@ def upload_file():
         # Check if at least one file is given
         if expcFile is None and expeFile is None:
             return 'Please go back and select at least one log file, an Expressway-E log file, an Expressway-C log file or both.'
+
+        # Remove any existing directory this user was using
+        if session.get('sessionid'):
+            oldpath = os.path.join(app.config['UPLOAD_FOLDER'], session.get('sessionid'))
+            try:
+                shutil.rmtree(oldpath)
+            except:
+                print "Error removing old path " + oldpath
 
         # Create a unique directory for this request's files
         subdir = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
