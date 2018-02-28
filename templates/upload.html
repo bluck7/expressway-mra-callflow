@@ -184,21 +184,27 @@
                 <legend>Log Files</legend>
                 <div style="margin-left: 5px">
                     <p>Enter the Expressway-E and Expressway-C log files. Click Submit to analyze.</p>
-                    <p class="indent">
-                        <label for="expefile">
-                            Expressway-E Logfile: <input type = "file" name = "fileE" id="expefile" />
-                        </label>
-                    </p>
-                    <p class="indent">
-                        <label for="expe2file">
-                            Expressway-E 2 Logfile: <input type = "file" name = "fileE2" id="expe2file" />
-                        </label>
-                    </p>
-                    <p class="indent">
-                        <label for="expcfile">
-                            Expressway-C Logfile: <input type = "file" name = "fileC" id="expcfile" />
-                        </label>
-                    </p>
+                    <fieldset>
+                        <legend>Expressway-E Cluster</legend>
+                        <p class="indent">
+                            <label for="expefile">
+                                Expressway-E1 Logfile: <input type = "file" name = "fileE" id="expefile" />
+                            </label>
+                        </p>
+                        <p class="indent">
+                            <label for="expe2file">
+                                Expressway-E2 Logfile: <input type = "file" name = "fileE2" id="expe2file" />
+                            </label>
+                        </p>
+                    </fieldset>
+                    <fieldset>
+                        <legend>Expressway-C Cluster</legend>
+                        <p class="indent">
+                            <label for="expcfile">
+                                Expressway-C1 Logfile: <input type = "file" name = "fileC" id="expcfile" />
+                            </label>
+                        </p>
+                    </fieldset>
                 </div>
             </fieldset>
             <input type = "submit"/>
