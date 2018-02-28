@@ -3602,7 +3602,7 @@ def load_main_empty():
 
 @app.route('/get_file/')
 def get_file():
-    linenum = request.args.get('line')
+    requestedLinenum = request.args.get('line')
     txtfilename = request.args.get('file')
     htmlfilename = os.path.splitext(txtfilename)[0] + '.html'
 
@@ -3637,10 +3637,10 @@ def get_file():
 
     # Return only a snippet of the file, otherwise the browser will slow to a crawl
     html = '<style> p { margin: 0; font-family: courier; white-space: nowrap; font-size: small }</style>\n'
-    firstline = int(linenum) - 1000
+    firstline = int(requestedLinenum) - 1000
     if firstline < 1:
         firstline = 1
-    lastline = int(linenum) + 1000
+    lastline = int(requestedLinenum) + 1000
     for currline, line in enumerate(htmlfile):
         if currline > lastline:
             break

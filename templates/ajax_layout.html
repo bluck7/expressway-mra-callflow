@@ -236,17 +236,12 @@
             $.get('/get_file', { file: filename, line: linenum }, function(data) {
                 console.log("Received data, displaying on .ui-layout-south...")
                 $(".ui-layout-south").html(data);
-
-                // Wait for pane to finish rendering before manipulating
-                $(".ui-layout-south").ready(function()
-                {
-                	console.log("Finished appending to .ui-layout-south, waiting for pane to refresh...")
-	                $(".ui-layout-south").scrollTop(0)
-    	            desiredScrollPos = $(selector).position().top
-        	        console.log("desiredScrollPos=" + desiredScrollPos)
-            	    $(".ui-layout-south").animate({scrollTop: desiredScrollPos}, 500);
-                	$(selector).css({background: "lightgreen", display: "inline"})
-                });
+               	console.log("Finished appending to .ui-layout-south, waiting for pane to refresh...")
+				$(".ui-layout-south").scrollTop(0)
+				desiredScrollPos = $(selector).position().top
+				console.log("desiredScrollPos=" + desiredScrollPos)
+				$(".ui-layout-south").animate({scrollTop: desiredScrollPos}, 500);
+				$(selector).css({background: "lightgreen", display: "inline"})
             });
         }
 
