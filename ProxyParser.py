@@ -153,10 +153,10 @@ def nextThisPointer(this):
 # =====================================================================================================================
 
 # Starting task execution. Module can be sipproxylegfsm or sipproxymsgdspfsm or other
-p_startTask = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.fsm.{module:w}" Level="TRACE" CodeLocation="allshare/fsm/fsmfsm.cpp({line:d})" Method="::sys_testAndExecTask" Thread="{thread:S}":  Detail="Starting message execution on task" Self="{self.specie}:{self.individ_no}" Sender="{sender.specie}:{sender.individ_no}" Msg="{msg}" Task="{task}" State="" NxtState="" NxtStateId="{next_state_id}"')
+p_startTask = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.fsm.{module:w}" Level="TRACE" CodeLocation="allshare/fsm/fsmfsm.cpp({line:d})" Method="::sys_testAndExecTask" Thread="{thread:S}":  Detail="Starting message execution on task" Self="{self.specie}:{self.individ_no}" Sender="{sender.specie}:{sender.individ_no}" Msg="{msg}" Task="{task}" State="" NxtState="" NxtStateId="{next_state_id}"')
 
 # Completing task execution
-p_completeTask = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.fsm.{module:w}" Level="TRACE" CodeLocation="allshare/fsm/fsmfsm.cpp({line:d})" Method="::sys_testAndExecTask" Thread="{thread:S}":  Detail="Completed message execution on task" Self="{self.specie}:{self.individ_no}" Sender="{sender.specie}:{sender.individ_no}" Msg="{msg}" Task="{task}" State="" NxtState="" NxtStateId="{next_state_id}" Started-task-name="{started_task_name}" Completed-task-name="{completed_task_name}"')
+p_completeTask = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.fsm.{module:w}" Level="TRACE" CodeLocation="allshare/fsm/fsmfsm.cpp({line:d})" Method="::sys_testAndExecTask" Thread="{thread:S}":  Detail="Completed message execution on task" Self="{self.specie}:{self.individ_no}" Sender="{sender.specie}:{sender.individ_no}" Msg="{msg}" Task="{task}" State="" NxtState="" NxtStateId="{next_state_id}" Started-task-name="{started_task_name}" Completed-task-name="{completed_task_name}"')
 #p_completeTask = compile('Method="::sys_testAndExecTask" Thread="{thread:S}":  Detail="Completed message execution on task" Self="{self.specie}:{self.individ_no}" Sender="{sender.specie}:{sender.individ_no}" Msg="{msg}" Task="{task}" State="" NxtState="" NxtStateId="{next_state_id}" Started-task-name="{started_task_name}" Completed-task-name="{completed_task_name}"')
 
 def parse_startTask(line, currentSpecie, currentIndividNum, senderSpecie, senderIndividNum, currentMsg):
@@ -216,30 +216,30 @@ class Route:
 
 
 # 2017-12-31T17:34:15.122-05:00 vm-bluck-fed-vcse1 tvcs: UTCTime="2017-12-31 22:34:15,123" Module="network.mediarouting" Level="DEBUG":  Action="Received" Detail="Route: Creating: Packets Rxd on 10.81.54.5:36072 (socket 0x556a7510b9c0) from UNDEFINED Txd on 10.81.54.5:36000  (socket 0x556a70d11220)  to 10.81.54.102:48446"
-p_mediaRoutingCreateIncoming = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Action="Received" Detail="Route: Creating: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from UNDEFINED Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
+p_mediaRoutingCreateIncoming = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Action="Received" Detail="Route: Creating: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from UNDEFINED Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
 
 # 2017-12-31T17:34:15.135-05:00 vm-bluck-fed-vcse1 tvcs: UTCTime="2017-12-31 22:34:15,135" Module="network.mediarouting" Level="DEBUG":  Action="Received" Src-ip="10.81.54.102" Src-port="48446" Detail="Route: Creating: Packets Rxd on 10.81.54.5:36000 (socket 0x556a70d11220) from 10.81.54.102:48446 Txd on 10.81.54.5:36072  (socket 0x556a7510b9c0)  to 10.122.73.183:18160"
 # Note, srcInfo seems to replicate the data in fromIP/fromPort
 # fromIP/fromPort <--> [rxIP/rxPort ==> txIP/txPort] <--> toIP/toPort
-p_mediaRoutingCreateOutgoing = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Action="Received" {srcInfo} Detail="Route: Creating: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from {fromIP}:{fromPort} Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
+p_mediaRoutingCreateOutgoing = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Action="Received" {srcInfo} Detail="Route: Creating: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from {fromIP}:{fromPort} Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
 
 # 2018-01-02T12:47:14.037-05:00 xway-pratco-e1 tvcs: UTCTime="2018-01-02 17:47:14,033" Module="network.mediarouting" Level="DEBUG":  Detail="Route: Deleting: Packets Rxd on 172.18.198.210:36076 (socket 0x562533d27170) from UNDEFINED Txd on 172.18.198.210:2776  (socket 0x56252eb0ccd0)  to 172.18.198.211:48188"
-p_mediaRoutingDeleteIncoming = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Detail="Route: Deleting: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from UNDEFINED Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
+p_mediaRoutingDeleteIncoming = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Detail="Route: Deleting: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from UNDEFINED Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
 
-p_mediaRoutingDeleteOutgoing = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  {remoteInfo} Detail="Route: Deleting: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from {fromIP}:{fromPort} Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
+p_mediaRoutingDeleteOutgoing = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  {remoteInfo} Detail="Route: Deleting: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from {fromIP}:{fromPort} Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
 
 
 # For TURN media routing logs, the first has fromIP/fromPort but not toIP/toPort. The second has toIP/toPort but not fromIP/fromPort
 
 # 2018-01-05T15:28:25.542-05:00 vm-bluck-fed-vcse1 tvcs: UTCTime="2018-01-05 20:28:25,542" Module="network.mediarouting" Level="DEBUG":  Action="Received" Src-ip="10.122.73.161" Src-port="19204" Detail="Route: Creating: Packets Rxd on 10.81.54.5:3478 (socket 0x5600d3502860) from 10.122.73.161:19204 Txd on 10.81.54.5:24012  (socket 0x5600d311dc80)  to 0.0.0.0 if destination is in Allowed Peer List"
-p_turnRoutingCreateIncoming = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Action="Received" {srcInfo} Detail="Route: Creating: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from {fromIP}:{fromPort} Txd on {txIP}:{txPort}  (socket {socket2})  to 0.0.0.0 if destination is in Allowed Peer List"')
+p_turnRoutingCreateIncoming = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Action="Received" {srcInfo} Detail="Route: Creating: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from {fromIP}:{fromPort} Txd on {txIP}:{txPort}  (socket {socket2})  to 0.0.0.0 if destination is in Allowed Peer List"')
 
 # 2018-01-05T15:28:25.542-05:00 vm-bluck-fed-vcse1 tvcs: UTCTime="2018-01-05 20:28:25,542" Module="network.mediarouting" Level="DEBUG":  Action="Received" Src-ip="0.0.0.0" Detail="Route: Creating: Packets Rxd on 10.81.54.5:24012 (socket 0x5600d311dc80) from Allowed Peer List Txd on 10.81.54.5:3478  (socket 0x5600d3502860)  to 10.122.73.161:19204"
-p_turnRoutingCreateOutgoing = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Action="Received" Src-ip="0.0.0.0" Detail="Route: Creating: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from Allowed Peer List Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
+p_turnRoutingCreateOutgoing = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Action="Received" Src-ip="0.0.0.0" Detail="Route: Creating: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from Allowed Peer List Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
 
-p_turnRoutingDeleteIncoming = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  {remoteInfo} Detail="Route: Deleting: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from {fromIP}:{fromPort} Txd on {txIP}:{txPort}  (socket {socket2})  to 0.0.0.0 if destination is in Allowed Peer List"')
+p_turnRoutingDeleteIncoming = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  {remoteInfo} Detail="Route: Deleting: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from {fromIP}:{fromPort} Txd on {txIP}:{txPort}  (socket {socket2})  to 0.0.0.0 if destination is in Allowed Peer List"')
 
-p_turnRoutingDeleteOutgoing = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Remote-ip="0.0.0.0" Detail="Route: Deleting: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from Allowed Peer List Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
+p_turnRoutingDeleteOutgoing = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.mediarouting" Level="DEBUG":  Remote-ip="0.0.0.0" Detail="Route: Deleting: Packets Rxd on {rxIP}:{rxPort} (socket {socket1}) from Allowed Peer List Txd on {txIP}:{txPort}  (socket {socket2})  to {toIP}:{toPort}"')
 
 
 # Note that the mediaRoutingCreateUndefined log is usually encountered first, but the external ip and port are
@@ -380,17 +380,17 @@ def parse_turnRoutingDeleteOutgoing(line, routeMap):
 #
 # Unfortunately what we don't get from this sequence is the ip:port to which we send the packet. Will see if we can infer that
 
-p_epollin = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/media_forwarding_framework.cpp({line:d})" Method="media_forwarding_framework::handle_events" Thread="{thread:S}": Handle EPOLLIN event for fd: {fd:d}')
+p_epollin = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/media_forwarding_framework.cpp({line:d})" Method="media_forwarding_framework::handle_events" Thread="{thread:S}": Handle EPOLLIN event for fd: {fd:d}')
 
-p_readDataAvailable1 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": Read UDP packet - socket description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{rxip:S}]:{rxport:S}')
+p_readDataAvailable1 = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": Read UDP packet - socket description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{rxip:S}]:{rxport:S}')
 
-p_readDataAvailable2 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": received from: [{fromip:S}]:{fromport:d}')
+p_readDataAvailable2 = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": received from: [{fromip:S}]:{fromport:d}')
 
-p_packetMatchesRoute = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/unidirectional_packet_router.cpp({line:d})" Method="unidirectional_packet_router::packetMatchesRoute" Thread="{thread:S}": unidirectional_packet_router::packetMatchesRoute {result:w}')
+p_packetMatchesRoute = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/unidirectional_packet_router.cpp({line:d})" Method="unidirectional_packet_router::packetMatchesRoute" Thread="{thread:S}": unidirectional_packet_router::packetMatchesRoute {result:w}')
 
-p_forwardPacket = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/unidirectional_packet_router.cpp({line:d})" Method="unidirectional_packet_router::forwardPacket" Thread="{thread:S}": Actually send the packet')
+p_forwardPacket = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/unidirectional_packet_router.cpp({line:d})" Method="unidirectional_packet_router::forwardPacket" Thread="{thread:S}": Actually send the packet')
 
-p_sendPacketOnWire = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/{file:w}.cpp({line:d})" Method="{class:w}::sendPacketOnWire" Thread="{thread:S}": Send UDP data, description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{txip:S}]:{txport:d}')
+p_sendPacketOnWire = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/{file:w}.cpp({line:d})" Method="{class:w}::sendPacketOnWire" Thread="{thread:S}": Send UDP data, description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{txip:S}]:{txport:d}')
 
 # Track the individual media handler threads and associate the file descriptors each thread is managing
 class MediaThread:
@@ -658,25 +658,25 @@ def getCall(sessionID, remoteSessionID):
 #p_inboundNettleAndSrcIP = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" {codeLocation} Method="SipProxyLeg::SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Set mNettleLeg="{nettleLeg}" origIngressZoneId="{origZoneId}" from origin="{fromIP}:{fromPort}"')
 p_inboundNettleAndSrcIP = compile('Method="SipProxyLeg::SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Set mNettleLeg="{nettleLeg}" origIngressZoneId="{origZoneId}" from origin="{fromIP}:{fromPort}"')
 
-p_ProcessInviteRequest = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processInviteRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId:d}')
+p_ProcessInviteRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processInviteRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId:d}')
 
 p_inboundProcessInitialRequest = compile('Method="SipProxyLeg::processInitialRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated=YES')
 #p_inboundProcessInitialRequest = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processInitialRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated=YES')
 
-p_ProcessSubsequentRequest = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processSubsequentRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated={auth}, rAuthUsernam=')
+p_ProcessSubsequentRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processSubsequentRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated={auth}, rAuthUsernam=')
 
-p_ProcessAckWithSdpRequest = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processAckWithSdpRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}')
+p_ProcessAckWithSdpRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processAckWithSdpRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}')
 
-#p_DisplayResponseInfo = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::displayResponseInfo" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" {responseType} response {responseCode} for request {requestName}')
+#p_DisplayResponseInfo = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::displayResponseInfo" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" {responseType} response {responseCode} for request {requestName}')
 p_DisplayResponseInfo = compile('Method="SipProxyLeg::displayResponseInfo" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" {responseType} response {responseCode} for request {requestName}')
 
-p_ReallySendSipRequest = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::reallySendSipRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" rRequestPackage=(mRequest.methodName={requestName}, mTransactionId={transactionId}, &mrLeg={mrLeg})')
+p_ReallySendSipRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::reallySendSipRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" rRequestPackage=(mRequest.methodName={requestName}, mTransactionId={transactionId}, &mrLeg={mrLeg})')
 
-p_SendStatefulResponseDirectly = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::sendStatefulResponseDirectly" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Sending {respType} response={responseCode} for transactionId={transactionId}')
+p_SendStatefulResponseDirectly = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::sendStatefulResponseDirectly" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Sending {respType} response={responseCode} for transactionId={transactionId}')
 
 # The following appear after displayResponseInfo on the leg that receives the response. The first pattern should match
 # the other 3 below.
-p_processResponse = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::process{respType}Response" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" cookie={cookie:S}') # The :S is needed to match on non-white-space since no other characters will match
+p_processResponse = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::process{respType}Response" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" cookie={cookie:S}') # The :S is needed to match on non-white-space since no other characters will match
 
 # The following are for reference
 p_processSuccessfulInviteResponse = compile('2017-12-31T17:34:15.094-05:00 vm-bluck-fed-cust2-vcsc1 tvcs: UTCTime="2017-12-31 22:34:15,073" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp(2608)" Method="SipProxyLeg::processSuccessfulInviteResponse" Thread="0x7f50e82ac700":  this="0x5596ab2c4810" Type="Outbound" cookie=47647')
@@ -685,7 +685,7 @@ p_processProvisionalResponse = compile('2017-12-31T17:34:15.189-05:00 vm-bluck-f
 
 p_processSuccessfulByeResponse = compile('2017-12-31T17:34:18.460-05:00 vm-bluck-fed-cust2-vcsc1 tvcs: UTCTime="2017-12-31 22:34:18,460" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp(2640)" Method="SipProxyLeg::processSuccessfulByeResponse" Thread="0x7f50e82ac700":  this="0x5596a7a97300" Type="Inbound" cookie=47674')
 
-p_getRequiredLicensingType = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::getRequiredLicensingType" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Callid from sip SIP CallID="{callid:S}"')
+p_getRequiredLicensingType = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::getRequiredLicensingType" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Callid from sip SIP CallID="{callid:S}"')
 
 
 
@@ -719,7 +719,7 @@ p_outboundIsTraversal = compile('Method="SipProxyLeg::isTraversalForBandwidth" T
 # For outbound legs that are cancelled, this is logged. This will be used to flag a cancelled outbound INVITE leg.
 p_outboundTimeout = compile('Method="SipProxyLeg::SIPPROXYLEGFSM_doTimeout" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" status update timer fired')
 
-p_apparent = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::calculateApparentAddressUri" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" apparentAddress={apparent_address:S}, transport={transport:S}')
+p_apparent = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::calculateApparentAddressUri" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" apparentAddress={apparent_address:S}, transport={transport:S}')
 
 p_destructor = compile('Method="SipProxyLeg::~SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Destructor')
 
@@ -1120,23 +1120,23 @@ p_mediaManipulatorCreateInstance = compile('Method="MediaManipulatorFactory::cre
 #p_sdpMediaManipulatorConstructor = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.cpp({line:d})" Method="SipSdpManipulator::SipSdpManipulator" Thread="{thread:S}":  this="{this:S}" Constructor , rCallSerialNumber={callSN}, branchId={brId}, rIPNetwork=\'IPv4\' m_remoteAddress: [\'IPv4\'\'{transport}\'\'{remoteAddr}\'] (best local: {localIP} -> remote: {remoteIP}), pBandwidthManipulator={bwm} mSdpSRTPEncryptionManager="mEncryptionTraits = mbDecryptMedia = {decryptMedia} mbMicrosoftSRTP = {microsoft} InterworkingEncryptionReplayProtectionMode = {protectionMode}"')
 
 # The following constructor gives the manipulator type more accurately than createInstance above.
-p_sdpMediaManipulatorConstructor2 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/{manipulatorType}SipSdpManipulator.cpp({line:d})" Method="{manipulatorType}SipSdpManipulator::{manipulatorType}SipSdpManipulator" Thread="{thread:S}":  this="{this:S}" Constructor{remainder}')
+p_sdpMediaManipulatorConstructor2 = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/{manipulatorType}SipSdpManipulator.cpp({line:d})" Method="{manipulatorType}SipSdpManipulator::{manipulatorType}SipSdpManipulator" Thread="{thread:S}":  this="{this:S}" Constructor{remainder}')
 
 #p_sdpMediaManipulatorConstructor2 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/{manipulatorType}SipSdpManipulator.cpp({line:d})" Method="{manipulatorType}SipSdpManipulator::{manipulatorType}SipSdpManipulator" Thread="{thread:S}":  this="{this:S}" Constructor &rMediaSessionManager={msm}, zone={zone}, rCallSerialNumber={callSN}, branchId={brId}, rIPNetwork=\'IPv4\' m_remoteAddress: [\'IPv4\'\'{transport}\'\'{remoteAddr}\'] (best local: {localIP} -> remote: {remoteIP}), pBandwidthManipulator={bwm}')
 
 #p_sdpMediaManipulatorConstructor3 = compile('2017-12-31T17:34:12.609-05:00 vm-bluck-fed-cust2-vcsc1 tvcs: UTCTime="2017-12-31 22:34:12,611" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/AssentClientSipSdpManipulator.cpp(33)" Method="AssentClientSipSdpManipulator::AssentClientSipSdpManipulator" Thread="0x7f50e82ac700":  this="0x5596aae53a20" Constructor &rMediaSessionManager=0x5596a4a66f80, rCallSerialNumber=86feb1d0-82ff-4ee9-a0bf-e02f0d816a7f, branchId=0, rIPNetwork=\'IPv4\' m_remoteAddress: [\'IPv4\'\'TCP\'\'10.81.54.5:7002\'] (best local: 10.81.54.102 -> remote: 10.81.54.5), pBandwidthManipulator=0')
 
-p_mediaHalfRequested = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.cpp({line:d})" Method="SipSdpManipulator::allocateMediaHalfIfRequired" Thread="{thread:S}":  this="{this:S}" Media half requested mediaLineIdx="{mediaLineIdx}"')
+p_mediaHalfRequested = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.cpp({line:d})" Method="SipSdpManipulator::allocateMediaHalfIfRequired" Thread="{thread:S}":  this="{this:S}" Media half requested mediaLineIdx="{mediaLineIdx}"')
 
-p_mediaHalfAlreadyExists = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.cpp({line:d})" Method="SipSdpManipulator::allocateMediaHalfIfRequired" Thread="{thread:S}":  this="{this:S}" Media half already exists mediaLineIdx="{mediaLineIdx}"')
+p_mediaHalfAlreadyExists = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.cpp({line:d})" Method="SipSdpManipulator::allocateMediaHalfIfRequired" Thread="{thread:S}":  this="{this:S}" Media half already exists mediaLineIdx="{mediaLineIdx}"')
 
-p_mediaHalfAllocationSuccess = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.cpp({line:d})" Method="SipSdpManipulator::mediaHalfAllocationSuccess" Thread="{thread:S}":  this="{this:S}" Media half allocation success called')
+p_mediaHalfAllocationSuccess = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.cpp({line:d})" Method="SipSdpManipulator::mediaHalfAllocationSuccess" Thread="{thread:S}":  this="{this:S}" Media half allocation success called')
 
-p_sdpMediaManipulatorDestructor2 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/{manipulatorType}SipSdpManipulator.cpp({line:d})" Method="{manipulatorType}SipSdpManipulator::~{manipulatorType}SipSdpManipulator" Thread="{thread:S}":  this="{this:S}" Destructor')
+p_sdpMediaManipulatorDestructor2 = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/{manipulatorType}SipSdpManipulator.cpp({line:d})" Method="{manipulatorType}SipSdpManipulator::~{manipulatorType}SipSdpManipulator" Thread="{thread:S}":  this="{this:S}" Destructor')
 
-p_releaseMediaHalf = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.hpp({line:d})" Method="SipSdpManipulator::releaseMediaHalfT" Thread="{thread:S}":  this="{this:S}" Releasing media half for mediaLineIdx={mediaLineIdx}')
+p_releaseMediaHalf = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.hpp({line:d})" Method="SipSdpManipulator::releaseMediaHalfT" Thread="{thread:S}":  this="{this:S}" Releasing media half for mediaLineIdx={mediaLineIdx}')
 
-p_sdpMediaManipulatorDestructor = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.cpp({line:d})" Method="SipSdpManipulator::~SipSdpManipulator" Thread="{thread:S}":  this="{this:S}" Destructor')
+p_sdpMediaManipulatorDestructor = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipSdpManipulator.cpp({line:d})" Method="SipSdpManipulator::~SipSdpManipulator" Thread="{thread:S}":  this="{this:S}" Destructor')
 
 # Media Session Manager
 p_getMediaHalf = compile('2017-12-30T11:52:34.026-05:00 vm-bluck-fed-vcse1 tvcs: UTCTime="2017-12-30 16:52:34,022" Module="developer.mediasessionmgr" Level="DEBUG" CodeLocation="ppcmains/oak/mediasession/MediaSessionMgr.cpp(311)" Method="MediaSessionMgr::getAssentDemuxServerMediaHalf" Thread="0x7fc1d8e2d700": MFF = 0x556a70b542c0, handler addr = 0x556a755b2278, Cookie = 0, CallSerialNumber = a162a9ed-4a56-43be-8599-1ae67d024cbf, sessionKey = branchId = 1, streamtype = STREAM_TYPE_AUDIO, streamNum = 1, sessionSideId = 0, ipnet = \'IPv4\' m_remoteAddress: [\'IPv4\'\'TCP\'\'10.81.54.102:25017\'] (best local: 10.81.54.5 -> remote: 10.81.54.102)')
@@ -1273,25 +1273,25 @@ def parse_mediaHalfAlreadyExists():
 
 # 2018-01-01T12:56:43.846-05:00 vm-bluck-fed-vcse1 tvcs: UTCTime="2018-01-01 17:56:43,846" Module="network.sip" Level="INFO":  Action="Sent" Local-ip="10.81.54.5" Local-port="7012" Dst-ip="10.81.54.102" Dst-port="25018" Detail="Sending Response Code=200, Method=OPTIONS, CSeq=30235, To=sip:10.81.54.5:7012, Call-ID=3be07e0ceb19d6df@10.81.54.102, From-Tag=c924fa30c7e5bdb2, To-Tag=00257b9a244d2547, Msg-Hash=9783133151195055080, Local-SessionID=, Remote-SessionID="
 
-p_networkSipReceivedReq = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Received" Local-ip="{localIP:S}" Local-port="{localPort:S}" Src-ip="{srcIP:S}" Src-port="{srcPort:S}" Detail="Receive Request Method={method:w}, CSeq={cseq:S}, Request-URI={reqUri:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}, Local-SessionID{localsessid:S}, Remote-SessionID{remsessid:S}"')
+p_networkSipReceivedReq = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Received" Local-ip="{localIP:S}" Local-port="{localPort:S}" Src-ip="{srcIP:S}" Src-port="{srcPort:S}" Detail="Receive Request Method={method:w}, CSeq={cseq:S}, Request-URI={reqUri:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}, Local-SessionID{localsessid:S}, Remote-SessionID{remsessid:S}"')
 
 # 2018-01-18T11:34:39.499-06:00 rcdn6-vm67-40 tvcs: UTCTime="2018-01-18 17:34:39,499" Module="network.sip" Level="INFO":  Action="Received" Local-ip="10.89.67.40" Local-port="5061" Src-ip="10.89.106.35" Src-port="50209" Detail="Receive Request Method=REGISTER, CSeq=1176, To=sip:7022@rcdn6-vm118-41.cisco.com, Call-ID=00ebd5d5-d8c60008-3d372b84-5f6b0fd9@10.89.106.35, From-Tag=00ebd5d5d8c6035e6dbee882-304060fa, To-Tag=, Msg-Hash=17912736280473840983"
 
-p_networkSipReceivedReq2 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Received" Local-ip="{localIP}" Local-port="{localPort}" Src-ip="{srcIP}" Src-port="{srcPort}" Detail="Receive Request Method={method:w}, CSeq={cseq:S}, To={reqUri:S}, Call-ID={callid:S}, From-Tag{fromtag}, To-Tag{totag}, Msg-Hash{msghash}"')
+p_networkSipReceivedReq2 = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Received" Local-ip="{localIP}" Local-port="{localPort}" Src-ip="{srcIP}" Src-port="{srcPort}" Detail="Receive Request Method={method:w}, CSeq={cseq:S}, To={reqUri:S}, Call-ID={callid:S}, From-Tag{fromtag}, To-Tag{totag}, Msg-Hash{msghash}"')
 
-p_networkSipReceivedResp = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Received" Local-ip="{localIP:S}" Local-port="{localPort:S}" Src-ip="{srcIP:S}" Src-port="{srcPort:S}" Detail="Receive Response Code={respCode:S}, Method={method:w}, CSeq={cseq:S}, To={to:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}, Local-SessionID{localsessionid:S}, Remote-SessionID{remotesessionid:S}"')
+p_networkSipReceivedResp = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Received" Local-ip="{localIP:S}" Local-port="{localPort:S}" Src-ip="{srcIP:S}" Src-port="{srcPort:S}" Detail="Receive Response Code={respCode:S}, Method={method:w}, CSeq={cseq:S}, To={to:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}, Local-SessionID{localsessionid:S}, Remote-SessionID{remotesessionid:S}"')
 
-p_networkSipReceivedDebug = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {app:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="DEBUG":  Action="Received" Local-ip="{localIP:S}" Local-port="{localPort:S}" Src-ip="{srcIP:S}" Src-port="{srcPort:S}" Msg-Hash="{msgHash:S}"')
+p_networkSipReceivedDebug = compile('{date:S}T{timestamp:S} {hostname:S} {app:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="DEBUG":  Action="Received" Local-ip="{localIP:S}" Local-port="{localPort:S}" Src-ip="{srcIP:S}" Src-port="{srcPort:S}" Msg-Hash="{msgHash:S}"')
 
-p_networkSipSentReq = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Sent" Local-ip="{localIP:S}" Local-port="{localPort:S}" Dst-ip="{destIP:S}" Dst-port="{destPort:S}" Detail="Sending Request Method={method:w}, CSeq={cseq:S}, Request-URI={requri:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}, Local-SessionID{localsessid:S}, Remote-SessionID{remsessid:S}"')
+p_networkSipSentReq = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Sent" Local-ip="{localIP:S}" Local-port="{localPort:S}" Dst-ip="{destIP:S}" Dst-port="{destPort:S}" Detail="Sending Request Method={method:w}, CSeq={cseq:S}, Request-URI={requri:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}, Local-SessionID{localsessid:S}, Remote-SessionID{remsessid:S}"')
 
 # 2018-01-18T12:34:33.318-05:00 rcdn6-vm67-42 tvcs: UTCTime="2018-01-18 17:34:33,319" Module="network.sip" Level="INFO":  Action="Sent" Local-ip="10.89.67.42" Local-port="25033" Dst-ip="10.89.118.41" Dst-port="5061" Detail="Sending Request Method=REGISTER, CSeq=1177, To=sip:9022@rcdn6-vm118-41.cisco.com, Call-ID=00ccfc99-dfc1000b-097eed33-7284631f@10.89.106.39, From-Tag=00ccfc99dfc1035f22eb415e-4a3518a3, To-Tag=, Msg-Hash=14400613170240473984"
 
-p_networkSipSentReq2 = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Sent" Local-ip="{localIP:S}" Local-port="{localPort:S}" Dst-ip="{destIP:S}" Dst-port="{destPort:S}" Detail="Sending Request Method={method:w}, CSeq={cseq:S}, To={requri:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}"')
+p_networkSipSentReq2 = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Sent" Local-ip="{localIP:S}" Local-port="{localPort:S}" Dst-ip="{destIP:S}" Dst-port="{destPort:S}" Detail="Sending Request Method={method:w}, CSeq={cseq:S}, To={requri:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}"')
 
-p_networkSipSentResp = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Sent" Local-ip="{localIP:S}" Local-port="{localPort:S}" Dst-ip="{destIP:S}" Dst-port="{destPort:S}" Detail="Sending Response Code={respCode:S}, Method={method:w}, CSeq={cseq:S}, To={to:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}, Local-SessionID{localsessid:S}, Remote-SessionID{remsessid:S}"')
+p_networkSipSentResp = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="INFO":  Action="Sent" Local-ip="{localIP:S}" Local-port="{localPort:S}" Dst-ip="{destIP:S}" Dst-port="{destPort:S}" Detail="Sending Response Code={respCode:S}, Method={method:w}, CSeq={cseq:S}, To={to:S}, Call-ID={callid:S}, From-Tag{fromtag:S}, To-Tag{totag:S}, Msg-Hash{msghash:S}, Local-SessionID{localsessid:S}, Remote-SessionID{remsessid:S}"')
 
-p_networkSipSentDebug = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} {app:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="DEBUG":  Action="Sent" Local-ip="{localIP:S}" Local-port="{localPort:S}" Dst-ip="{destIP:S}" Dst-port="{destPort:S}" Msg-Hash="{msgHash:S}"')
+p_networkSipSentDebug = compile('{date:S}T{timestamp:S} {hostname:S} {app:S}: UTCTime="{date2:S} {timestamp2:S}" Module="network.sip" Level="DEBUG":  Action="Sent" Local-ip="{localIP:S}" Local-port="{localPort:S}" Dst-ip="{destIP:S}" Dst-port="{destPort:S}" Msg-Hash="{msgHash:S}"')
 
 p_from = compile('From: <sip:{fromuri:S}>;tag={fromtag:S}')
 p_cline = compile('c=IN IP4 {cip:S}')
@@ -1995,25 +1995,6 @@ def getRouteMapTable(routeMap):
 
     return routeTable
 
-
-# def buildProxyListForExpE(proxyList):
-#     global gOrigPhoneIP, gDestPhoneIP
-#     for leg in gProxyLegMap.values():
-#         otherLeg = gProxyLegMap.get(leg.otherLeg)
-#         if otherLeg is None:
-#             # Ignore proxy legs that don't have a mate
-#             continue
-#         if leg.isInvite and leg.direction == 'Inbound' and leg.fromIP == gOrigPhoneIP:
-#             proxyList[0] = Proxy(0, leg.this, otherLeg.this,
-#                                  leg.individNum, otherLeg.individNum,
-#                                  leg.fromIP, otherLeg.toIP,
-#                                  leg.fromNettle, otherLeg.toNettle)
-#
-#         if otherLeg.isInvite and otherLeg.direction == 'Outbound' and otherLeg.toIP == gDestPhoneIP:
-#             proxyList[5] = Proxy(5, leg.this, otherLeg.this,
-#                                  leg.individNum, otherLeg.individNum,
-#                                  leg.fromIP, otherLeg.toIP,
-#                                  leg.fromNettle, otherLeg.toNettle)
 
 import operator
 def buildProxyListForExpENoIP(callList, proxyLegMap):
@@ -3334,9 +3315,14 @@ def buildSequenceDiagram(includeTurn):
 
 
 def save_globals(path):
-    global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapE2, gPortAssignment, gB2buaPortAssignment
+    global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC
+    global gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapE2, gPortAssignment, gB2buaPortAssignment
+    global gProxyLegMapE, gProxyLegMapE2, gProxyLegMapC
+
     with open(os.path.join(path, "calls.dat"), "wb") as f:
         pickle.dump(gCallList, f)
+    with open(os.path.join(path, "proxylegs.dat"), "wb") as f:
+        pickle.dump([gProxyLegMapE, gProxyLegMapE2, gProxyLegMapC], f)
     with open(os.path.join(path, "proxy.dat"), "wb") as f:
         pickle.dump(gProxyList, f)
     with open(os.path.join(path, "logs.dat"), "wb") as f:
@@ -3351,10 +3337,15 @@ def save_globals(path):
         pickle.dump([gPortAssignment, gB2buaPortAssignment], f)
 
 def load_globals(path):
-    global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC, gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapE2, gPortAssignment, gB2buaPortAssignment
+    global gCallList, gProxyList, gLogList, gExpEIP, gExpCIP, gCucmIP, gRouteMapE, gRouteMapC
+    global gPacketRelayMapE, gPacketRelayMapC, gPacketRelayMapE2, gPortAssignment, gB2buaPortAssignment
+    global gProxyLegMapE, gProxyLegMapE2, gProxyLegMapC
+
     try:
         with open(os.path.join(path, "calls.dat")) as f:
             gCallList = pickle.load(f)
+        with open(os.path.join(path, "proxylegs.dat")) as f:
+            gProxyLegMapE, gProxyLegMapE2, gProxyLegMapC = pickle.load(f)
         with open(os.path.join(path, "proxy.dat")) as f:
             gProxyList = pickle.load(f)
         with open(os.path.join(path, "logs.dat")) as f:
@@ -3375,11 +3366,13 @@ def load_globals(path):
 def index():
     return render_template('upload.html')
 
-#                       ExpE                                 ExpC              CUCM          Internal ExpC (if natted)
-gIpMap = {'bud':    [['10.81.54.5'],                     '10.81.54.102',   '10.81.54.105',   None],
-          'mandar': [['172.18.198.210'],                 '172.18.198.211', '172.18.198.212', None],
-          'wei':    [['172.18.194.52','172.18.194.62'],  '172.18.202.226', '200.1.1.11',     '200.1.1.102'], # Call goes through wsun2-test2
-          'slteam': [['10.89.67.40'],                    '10.89.67.42',    '10.89.118.41',   None]}
+#                         ExpE                                 ExpC              CUCM          Internal ExpC (if natted)
+gIpMap = {'bud':      [['10.81.54.5'],                     '10.81.54.102',   '10.81.54.105',   None],
+          'mandar':   [['172.18.198.210'],                 '172.18.198.211', '172.18.198.212', None],
+          'wei':      [['172.18.194.52','172.18.194.62'],  '172.18.202.226', '200.1.1.11',     '200.1.1.102'], # Call goes through wsun2-test2
+          'slteam':   [['10.89.67.40'],                    '10.89.67.42',    '10.89.118.41',   None],
+          'solution': [['10.4.125.40'],                    '20.1.25.40',     '10.4.225.101',   None],
+         }
 
 @app.route('/uploader', methods=['GET', 'POST'])
 def upload_file():
