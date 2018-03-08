@@ -13,6 +13,10 @@ import socket
 import requests
 import shutil
 
+bufsize = 1  # line buffered
+fsock = open('output.log', 'w', bufsize)
+sys.stdout = fsock
+sys.stderr = fsock
 
 
 UPLOAD_FOLDER = './uploaded_files'
@@ -3645,7 +3649,7 @@ def get_file():
     return html
 
 def main_html():
-    app.run(host='localhost', port=8051, debug=True)
+    app.run(host='0.0.0.0', port=80)
     return
 
 
