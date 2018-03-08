@@ -15,9 +15,7 @@ import shutil
 
 
 
-
-
-UPLOAD_FOLDER = '/Users/bluck/PycharmProjects/expressway-mra-callflow/uploaded_files'
+UPLOAD_FOLDER = './uploaded_files'
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -3593,6 +3591,10 @@ def load_sequence_diagram():
 def load_main_empty():
     # Render the main page without any call flow loaded. The flow can be loaded from links on the main page.
     return render_template('ajax_layout.html', flow='')
+
+@app.errorhandler(404)
+def not_found(error):
+    return render_template('404.html'), 404
 
 @app.route('/get_file/')
 def get_file():
