@@ -12,18 +12,23 @@ import sys
 import socket
 import requests
 import shutil
+from werkzeug.contrib.profiler import ProfilerMiddleware
 
 bufsize = 1  # line buffered
 fsock = open('output.log', 'w', bufsize)
 sys.stdout = fsock
 sys.stderr = fsock
 
-
 UPLOAD_FOLDER = './uploaded_files'
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.secret_key = '^8_p;B\wbL!,Mp]Jw(Qw:L=w'
+
+# Uncomment the following to profile the service. It will print out the 30 most expensive functions after every request
+# See https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-xvi-debugging-testing-and-profiling
+#app.config['PROFILE'] = True
+#app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[30])
 
 gProxyLegMap = {}
 gProxyLegMapE = {}
@@ -181,7 +186,7 @@ def parse_startTask(line, currentSpecie, currentIndividNum, senderSpecie, sender
 
 
 def parse_completeTask(line):
-    r = p_completeTask.search(line)
+    r = p_completeTask.parse(line)
     if r is None:
         return False
     else:
@@ -406,7 +411,7 @@ class MediaThread:
 
 def parse_epollin(line, mediaThreadMap):
     # Use the EPOLLIN log to assicate an FD with a thread
-    r = p_epollin.search(line)
+    r = p_epollin.parse(line)
     if r is None:
         return False
     timestamp = r['timestamp2']
@@ -451,7 +456,7 @@ class PacketRelayConnection:
 
 
 def parse_readDataAvailable(line, f, packetRelayMap):
-    r = p_readDataAvailable1.search(line)
+    r = p_readDataAvailable1.parse(line)
     if r is None:
         return False
 
@@ -463,7 +468,7 @@ def parse_readDataAvailable(line, f, packetRelayMap):
     timestamp = r['timestamp2']
 
     line = f.next()
-    r = p_readDataAvailable2.search(line)
+    r = p_readDataAvailable2.parse(line)
     if r is None:
         print "*** parse_readDataAvailable: Didn't get the next readDataAvailable log"
         print line
@@ -480,7 +485,7 @@ def parse_readDataAvailable(line, f, packetRelayMap):
         # We're done with this packet if we run into another EPOLLIN
         if 'EPOLLIN' in line:
             break
-        r = p_forwardPacket.search(line)
+        r = p_forwardPacket.parse(line)
         if r is not None:
             break
 
@@ -492,7 +497,7 @@ def parse_readDataAvailable(line, f, packetRelayMap):
 
     # On the E, we get a sendPacketOnWire() log after forwardPacket, but on the C we don't, so treat it as optional
     line = f.next()
-    r = p_sendPacketOnWire.search(line)
+    r = p_sendPacketOnWire.parse(line)
     txFD = ''
     txIP = ''
     txPort = ''
@@ -515,7 +520,7 @@ def scrubPacketRelayData(packetRelayMap, routeMap):
     # Fill in the rightSocket's toIP and toPort using the fromIP and fromPort of that same socket when its on the left.
     # The toIP and toPort are not given to us in the logs, so we need to scan the route map to find which IP and port
     # the packets are sent to.
-    #git
+    #
     # Note that we cannot use the packet relay map itself to get this info because you can have an incoming socket that
     # receives from ANY, and might receive from the phones local port, but send to a relay port (e.g. 24000). Thus,
     # it is better to scan the route table looking for the port to fill in.
@@ -526,7 +531,8 @@ def scrubPacketRelayData(packetRelayMap, routeMap):
             continue
         done = False
         for route in routeMap.values():
-            if route.socket1 == packetRelayEntry.txSocket:
+            # Need to match both the tx and rxSocket because TURN shared the same 3478 socket with lots of connections
+            if route.socket1 == packetRelayEntry.txSocket and route.socket2 == packetRelayEntry.rxSocket:
                 for event in route.event:
                     if event.extIP1 != 'undef' and event.extPort1 != 'undef':
                         packetRelayEntry.toIP = event.extIP1
@@ -657,20 +663,20 @@ def getCall(sessionID, remoteSessionID):
 # leg to tell us that, if we care.
 
 # This is printed before the FSM message execution
-#p_inboundNettleAndSrcIP = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" {codeLocation} Method="SipProxyLeg::SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Set mNettleLeg="{nettleLeg}" origIngressZoneId="{origZoneId}" from origin="{fromIP}:{fromPort}"')
-p_inboundNettleAndSrcIP = compile('Method="SipProxyLeg::SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Set mNettleLeg="{nettleLeg}" origIngressZoneId="{origZoneId}" from origin="{fromIP}:{fromPort}"')
+p_inboundNettleAndSrcIP = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" {codeLocation} Method="SipProxyLeg::SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Set mNettleLeg="{nettleLeg}" origIngressZoneId="{origZoneId}" from origin="{fromIP}:{fromPort}"')
+#p_inboundNettleAndSrcIP = compile('Method="SipProxyLeg::SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Set mNettleLeg="{nettleLeg}" origIngressZoneId="{origZoneId}" from origin="{fromIP}:{fromPort}"')
 
 p_ProcessInviteRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processInviteRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId:d}')
 
-p_inboundProcessInitialRequest = compile('Method="SipProxyLeg::processInitialRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated=YES')
-#p_inboundProcessInitialRequest = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processInitialRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated=YES')
+#p_inboundProcessInitialRequest = compile('Method="SipProxyLeg::processInitialRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated=YES')
+p_inboundProcessInitialRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processInitialRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated=YES')
 
 p_ProcessSubsequentRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processSubsequentRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}, bAuthenticated={auth}, rAuthUsernam=')
 
 p_ProcessAckWithSdpRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::processAckWithSdpRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" transactionId={transactionId}')
 
 #p_DisplayResponseInfo = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::displayResponseInfo" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" {responseType} response {responseCode} for request {requestName}')
-p_DisplayResponseInfo = compile('Method="SipProxyLeg::displayResponseInfo" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" {responseType} response {responseCode} for request {requestName}')
+p_DisplayResponseInfo = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::displayResponseInfo" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" {responseType} response {responseCode} for request {requestName:S}')
 
 p_ReallySendSipRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::reallySendSipRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" rRequestPackage=(mRequest.methodName={requestName}, mTransactionId={transactionId}, &mrLeg={mrLeg})')
 
@@ -708,29 +714,29 @@ p_getRequiredLicensingType = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: 
 # The timeout message is NOT after the "Run" message, this will need to be scanned for continuously.
 
 # For outbound legs, this is the first SipProxyLeg log after starting message execution on msg "Run"
-p_outboundSendSipRequest = compile('Method="SipProxyLeg::sendSipRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" rRequest={sipRequest}, transactionId={transaction}, rRequestor={requestor:S}')  # :S is needed here to specify non-whitespace because this is the end of the line and the parser doesn't have anything else to match on to find the end of the string
+p_outboundSendSipRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::sendSipRequest" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" rRequest={sipRequest}, transactionId={transaction}, rRequestor={requestor:S}')  # :S is needed here to specify non-whitespace because this is the end of the line and the parser doesn't have anything else to match on to find the end of the string
 
 # For outbound legs this log identifies the next hop
-p_outboundSetNextHop = compile('Method="SipProxyLeg::setNextHopFromUrl" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" setNextHopAddr: address="{nextHopIP}:{nextHopPort}/{nextHopTransport}"')
+p_outboundSetNextHop = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::setNextHopFromUrl" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" setNextHopAddr: address="{nextHopIP}:{nextHopPort}/{nextHopTransport}"')
 
 # For outbound legs this log identifes nettle and a bunch of other stuff. Works for early and delayed media (with and without SDP)
-p_outboundRouteViaNettle = compile('Method="SipProxyLeg::routeViaNettleIfNeeded" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}"  routingViaNettle="{routingViaNettle}"  twoInARow="{towInARow}" oneIsATraversalServerZone="{oneIsATraversalServerZone}" isCall="{isCall}" isRefer="{isRefer}" fromClusterPeer="{fromClusterPeer}" fromNettle="{fromNettle}" toNettle="{toNettle}" inboundZone={inboundZone} ({inboundZoneSettings} ) outboundZone={outboundZone} ({outboundZoneSettings} ) CryptoRequired="{cryptoRequired}" ICERequired="{iceRequired}" ReferTerminationRequired="{referTerminationRequired}" TranslateFromMicrosoftRequired="{TranslateFromMicrosoftRequired}" TranslateToMicrosoftRequired="{TranslateToMicrosoftRequired}" routeViaNettle="{routeViaNettle}"')
+p_outboundRouteViaNettle = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::routeViaNettleIfNeeded" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}"  routingViaNettle="{routingViaNettle}"  twoInARow="{towInARow}" oneIsATraversalServerZone="{oneIsATraversalServerZone}" isCall="{isCall}" isRefer="{isRefer}" fromClusterPeer="{fromClusterPeer}" fromNettle="{fromNettle}" toNettle="{toNettle}" inboundZone={inboundZone} ({inboundZoneSettings} ) outboundZone={outboundZone} ({outboundZoneSettings} ) CryptoRequired="{cryptoRequired}" ICERequired="{iceRequired}" ReferTerminationRequired="{referTerminationRequired}" TranslateFromMicrosoftRequired="{TranslateFromMicrosoftRequired}" TranslateToMicrosoftRequired="{TranslateToMicrosoftRequired}" routeViaNettle="{routeViaNettle}"')
 
 p_outboundIsTraversal = compile('Method="SipProxyLeg::isTraversalForBandwidth" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}"  isTraversalForBandwidth="{isTraversalForBandwidth}": mstbTakeMedia->getVal()="{takeMedia}" isNettleLeg()="{isNettle}" otherLeg->isNettleLeg()="{otherLegIsNettle}"')
 
 # For outbound legs that are cancelled, this is logged. This will be used to flag a cancelled outbound INVITE leg.
-p_outboundTimeout = compile('Method="SipProxyLeg::SIPPROXYLEGFSM_doTimeout" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" status update timer fired')
+p_outboundTimeout = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::SIPPROXYLEGFSM_doTimeout" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" status update timer fired')
 
 p_apparent = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::calculateApparentAddressUri" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" apparentAddress={apparent_address:S}, transport={transport:S}')
 
-p_destructor = compile('Method="SipProxyLeg::~SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Destructor')
+p_destructor = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::~SipProxyLeg" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" Destructor')
 
 # ==========================================================
 # Proxy Leg logs
 # ==========================================================
 
 def parse_inboundNettleAndSrcIP(line):
-    r = p_inboundNettleAndSrcIP.search(line)
+    r = p_inboundNettleAndSrcIP.parse(line)
     if r is None:
         return False
     else:
@@ -747,7 +753,7 @@ def parse_inboundNettleAndSrcIP(line):
 
 
 def parse_outboundSendSipRequest(line, currentIndividNum):
-    r = p_outboundSendSipRequest.search(line)
+    r = p_outboundSendSipRequest.parse(line)
     if r is None:
         return False
     else:
@@ -774,7 +780,7 @@ def parse_outboundSendSipRequest(line, currentIndividNum):
 
 
 def parse_outboundTimeout(line):
-    r = p_outboundTimeout.search(line)
+    r = p_outboundTimeout.parse(line)
     if r is None:
         return False
     else:
@@ -805,7 +811,7 @@ def parse_apparent(line):
 
 
 def parse_destructor(line):
-    r = p_destructor.search(line)
+    r = p_destructor.parse(line)
     if r is None:
         return False
     else:
@@ -852,7 +858,7 @@ def parse_ProcessInviteRequest(line):
 
 
 def parse_inboundProcessInitialRequest(line, currentIndividNum, currentMsg):
-    r = p_inboundProcessInitialRequest.search(line)
+    r = p_inboundProcessInitialRequest.parse(line)
     if r is None:
         return False
     else:
@@ -926,7 +932,7 @@ def parse_ProcessAckWithSdpRequest(line):
 
 
 def parse_DisplayResponseInfo(line):
-    r = p_DisplayResponseInfo.search(line)
+    r = p_DisplayResponseInfo.parse(line)
     if r is None:
         return False
     else:
@@ -1023,7 +1029,7 @@ def parse_SendStatefulResponseDirectly(line):
 
 
 def parse_outboundSetNextHop(line):
-    r = p_outboundSetNextHop.search(line)
+    r = p_outboundSetNextHop.parse(line)
     if r is None:
         return False
     else:
@@ -1043,7 +1049,7 @@ def parse_outboundSetNextHop(line):
 
 
 def parse_outboundRouteViaNettle(line):
-    r = p_outboundRouteViaNettle.search(line)
+    r = p_outboundRouteViaNettle.parse(line)
     if r is None:
         return False
     else:
@@ -1113,8 +1119,8 @@ def parse_getRequiredLicensingType(line):
 #          -> SipSdpManipulator::~SipSdpManipulator
 #
 
-#p_isMediaRouted = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::isMediaRouted" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}"  isMediaRouted="{isMediaRouted}": mstbTakeMedia->getVal()="{takeMedia}"')
-p_isMediaRouted = compile('Method="SipProxyLeg::isMediaRouted" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}"  isMediaRouted="{isMediaRouted}": mstbTakeMedia->getVal()="{takeMedia}"')
+p_isMediaRouted = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::isMediaRouted" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}"  isMediaRouted="{isMediaRouted}": mstbTakeMedia->getVal()="{takeMedia}"')
+#p_isMediaRouted = compile('Method="SipProxyLeg::isMediaRouted" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}"  isMediaRouted="{isMediaRouted}": mstbTakeMedia->getVal()="{takeMedia}"')
 
 #p_mediaManipulatorCreateInstance = compile('{date:S}T{timestamp:S}-0{tz:d}:00 {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/MediaManipulatorFactory.cpp({line:d})" Method="MediaManipulatorFactory::createInstance" Thread="{thread:S}": &rMediaSessionMgr={msm}, &rStatusMgr={sm}, bRouteMedia={routeMedia}, eType={manipulatorType}, rCallSerialNumber={callSN}, bIsNatted={isNatted}, branchId={brId}, rIPNetwork=\'IPv4\' m_remoteAddress: [\'IPv4\'\'{transport}\'\'{remoteAddr}\'] (best local: {localIP} -> remote: {remoteIP}), zone={zone}, eMediaRoutingMode={mrm}, pBandwidthManipulator={bwm}, bDecryptMedia={decryptMedia}, mffh={mffh}, nettleLeg={nettleLeg}, passthruLeg={passthroughLeg}')
 p_mediaManipulatorCreateInstance = compile('Method="MediaManipulatorFactory::createInstance" Thread="{thread:S}": &rMediaSessionMgr={msm}, &rStatusMgr={sm}, bRouteMedia={routeMedia}, eType={manipulatorType}, rCallSerialNumber={callSN}, bIsNatted={isNatted}, branchId={brId}, rIPNetwork=\'IPv4\' m_remoteAddress: [\'IPv4\'\'{transport}\'\'{remoteAddr}\'] (best local: {localIP} -> remote: {remoteIP}), zone={zone}, eMediaRoutingMode={mrm}, pBandwidthManipulator={bwm}, bDecryptMedia={decryptMedia}, mffh={mffh}, nettleLeg={nettleLeg}, passthruLeg={passthroughLeg}')
@@ -1145,7 +1151,7 @@ p_getMediaHalf = compile('2017-12-30T11:52:34.026-05:00 vm-bluck-fed-vcse1 tvcs:
 
 
 def parse_isMediaRouted(line, currentProxyLegThis):
-    r = p_isMediaRouted.search(line)
+    r = p_isMediaRouted.parse(line)
     if r is None:
         return False, currentProxyLegThis
     else:
@@ -1781,6 +1787,7 @@ def parse_networkSipSentResp(line):
 # ====================================================================================================================
 #                                          F I L E   P R O C E S S I N G
 # ====================================================================================================================
+
 
 def parseFile(filename, routeMap, mediaThreadMap, packetRelayMap):
     global gNumTries, gCurrFilename, gCurrLinenum
@@ -3652,48 +3659,7 @@ def main_html():
     app.run(host='0.0.0.0', port=80)
     return
 
-
-def main_text():
-    expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/Michael_Logs/ice_defaultrelayAB_caller_holdresume_bad_audio_2/loggingsnapshot_rcdn6-vm67-40_2018-01-18_17_39_46.txt"
-    expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/Michael_Logs/ice_defaultrelayAB_caller_holdresume_bad_audio_2/loggingsnapshot_rcdn6-vm67-42_2018-01-18_17_39_52.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/Michael_Logs/ice_defaultrelayAB_holdresume/loggingsnapshot_rcdn6-vm67-40_2018-01-17_22_09_09.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/Michael_Logs/ice_defaultrelayAB_holdresume/loggingsnapshot_rcdn6-vm67-42_2018-01-17_22_09_06.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/Wei_Logs/ice_synergylite_defaultrelayAB_holdresumeAworks_holdresumeBnomedia/loggingsnapshot_wsun2-test2_2018-01-12_22_07_53.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/Wei_Logs/ice_synergylite_defaultrelayAB_holdresumeAworks_holdresumeBnomedia/loggingsnapshot_c038-expc_2018-01-12_22_07_47.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/Wei_Logs/ice_synergylite_defaultrelayAB_holdresumeAworks_holdresumeBnomedia/loggingsnapshot_wsun2-test2_2018-01-12_21_40_56.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/Wei_Logs/ice_synergylite_defaultrelayAB_holdresumeAworks_holdresumeBnomedia/loggingsnapshot_c038-expc_2018-01-12_21_40_51.txt"
-    #expeFilename = "/Users/bluck/Downloads/loggingsnapshot_wsun2-test2_2018-01-11_21_33_11.txt"
-    #expcFilename = "/Users/bluck/Downloads/loggingsnapshot_c038-expc_2018-01-11_21_33_13.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-prototype/mra_expe.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-prototype/mra_expc.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/ice-a-defaultrelay-b-defaultrelay/attempt2/mandar_ice_a_defaultrelay_b_defaultrelay_vcse.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/ice-a-defaultrelay-b-defaultrelay/attempt2/mandar_ice_a_defaultrelay_b_defaultrelay_vcsc.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-prototype/mra_expe.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-prototype/mra_expc.txt"
-    #expeFilename = "/Users/bluck/Downloads/diagnostic_log_vm-bluck-fed-vcse1_2018-01-08_11:35:38/loggingsnapshot_vm-bluck-fed-vcse1_2018-01-08_11:35:38.txt"
-    #expcFilename = "/Users/bluck/Downloads/diagnostic_log_vm-bluck-fed-cust2-vcsc1_2018-01-08_11:35:43/loggingsnapshot_vm-bluck-fed-cust2-vcsc1_2018-01-08_11:35:43.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/non-ice-hold-resume/mandar_nonice_holdresume_vcse.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/non-ice-hold-resume/mandar_nonice_holdresume_vcsc.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/ice-basic-call/mandar_ice_basiccall_vcse.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/ice-basic-call/mandar_ice_basiccall_vcsc.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/ice-mutual-hold/mandar_ice_mutualhold_vcse.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/ice-mutual-hold/mandar_ice_mutualhold_vcsc.txt"
-    #expeFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/ice-a-defaultrelay-b-defaulthost/mandar_ice_a_defaultrelay_b_defaulthost_vcse.txt"
-    #expcFilename = "/Users/bluck/Documents/ICE/logs/Parsing/My_Logs/with-mandars-diffs/ice-a-defaultrelay-b-defaulthost/mandar_ice_a_defaultrelay_b_defaulthost_vcsc.txt"
-    proxyList, routeMapE, routeMapC = initialize(expeFilename, expcFilename)
-    proxyTable = getProxyTable(proxyList)
-    print
-    print "PROXY TABLE"
-    print proxyTable
-    msgTable = getCallFlowTable(proxyList, routeMapE, routeMapC)
-    print
-    print "MSG TABLE"
-    print msgTable.get_string(sortby="Timestamp")
-
-    return
-
 def main():
-    #main_text()
     main_html()
 
 if __name__ == "__main__":
