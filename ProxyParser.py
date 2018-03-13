@@ -2779,6 +2779,10 @@ def initialize(expeFilename, expe2Filename, expcFilename):
         # print gFsmTable
         # print SipProxyLegSet
 
+    # See if we found any calls in the log files
+    if len(gCallList) == 0:
+        return None, None, None
+
     return gCallList[0].proxyList, routeMapE, routeMapC
 
 
@@ -3451,6 +3455,9 @@ def upload_file():
 
         # Parse the files!!
         gProxyList, gRouteMapE, gRouteMapC = initialize(expeFilename, expe2Filename, expcFilename)
+        if gProxyList is None:
+            # Did not find any calls
+            return 'Did not find any calls on those log files. Please go back to the previous page and at the bottom are buttons to show the logger CLI commands for the Expressway-E and Expressway-C. Log in to the admin CLI, apply those commands, and re-run the test.'
 
         asciiProxyTable = getProxyTable(gProxyList)
         print
