@@ -14,6 +14,11 @@ import requests
 import shutil
 from werkzeug.contrib.profiler import ProfilerMiddleware
 
+bufsize = 1  # line buffered
+fsock = open('output.log', 'w', bufsize)
+sys.stdout = fsock
+sys.stderr = fsock
+
 UPLOAD_FOLDER = './uploaded_files'
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 app = Flask(__name__)
@@ -3658,7 +3663,7 @@ def get_file():
     return html
 
 def main_html():
-    app.run(host='localhost', port=8051, debug=True)
+    app.run(host='0.0.0.0', port=80)
     return
 
 def main():
