@@ -14,10 +14,13 @@ import requests
 import shutil
 from werkzeug.contrib.profiler import ProfilerMiddleware
 
-bufsize = 1  # line buffered
-fsock = open('output.log', 'w', bufsize)
-sys.stdout = fsock
-sys.stderr = fsock
+gProductionMode = True
+
+if gProductionMode:
+    bufsize = 1  # line buffered
+    fsock = open('output.log', 'w', bufsize)
+    sys.stdout = fsock
+    sys.stderr = fsock
 
 UPLOAD_FOLDER = './uploaded_files'
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
@@ -389,7 +392,7 @@ def parse_turnRoutingDeleteOutgoing(line, routeMap):
 
 p_epollin = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/media_forwarding_framework.cpp({line:d})" Method="media_forwarding_framework::handle_events" Thread="{thread:S}": Handle EPOLLIN event for fd: {fd:d}')
 
-p_readDataAvailable1 = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": Read UDP packet - socket description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{rxip:S}]:{rxport:S}')
+p_readDataAvailable1 = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": Read UDP packet - socket description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{rxip:S}]:{rxport:S} ')
 
 p_readDataAvailable2 = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/TerminationPointBase.cpp({line:d})" Method="TerminationPointBase::readDataAvailable" Thread="{thread:S}": received from: [{fromip:S}]:{fromport:d}')
 
@@ -397,7 +400,7 @@ p_packetMatchesRoute = compile('{date:S}T{timestamp:S} {hostname:S} {application
 
 p_forwardPacket = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="DEBUG" CodeLocation="ppcmains/mediarouting/unidirectional_packet_router.cpp({line:d})" Method="unidirectional_packet_router::forwardPacket" Thread="{thread:S}": Actually send the packet')
 
-p_sendPacketOnWire = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/{file:w}.cpp({line:d})" Method="{class:w}::sendPacketOnWire" Thread="{thread:S}": Send UDP data, description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{txip:S}]:{txport:d}')
+p_sendPacketOnWire = compile('{date:S}T{timestamp:S} {hostname:S} {application:S}: UTCTime="{date2:S} {timestamp2:S}" Module="developer.mediarouting.core" Level="TRACE" CodeLocation="ppcmains/mediarouting/{file:w}.cpp({line:d})" Method="{class:w}::sendPacketOnWire" Thread="{thread:S}": Send UDP data, description: int m_sockfd = {fd:d}, fd_registration * m_powner = {powner:S}, TP_HANDLE m_hself = {socket:S}, m_uprhandle = {upr:S}, bound addr == [{txip:S}]:{txport:d} ')
 
 # Track the individual media handler threads and associate the file descriptors each thread is managing
 class MediaThread:
@@ -719,6 +722,12 @@ p_outboundSendSipRequest = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UT
 # For outbound legs this log identifies the next hop
 p_outboundSetNextHop = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::setNextHopFromUrl" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" setNextHopAddr: address="{nextHopIP}:{nextHopPort}/{nextHopTransport}"')
 
+# In 8.12, the setNextHopFromUrl function was moved and name changed, the following is the new one
+
+#2018-03-13T17:44:11.953-04:00 c038-expc tvcs: UTCTime="2018-03-13 21:44:11,945" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp(8264)" Method="SipProxyLeg::updateAdjacencyDependencies" Thread="0x7ff92d720700":  this="0x5624d2d9dd20" Type="Outbound" ['IPv4''TCP''200.1.1.11:5061'] is not towards one of our alternates
+p_updateAdjacencyDependencies = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::updateAdjacencyDependencies" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}" [\'{protocol}\'{nextHopTransport}\'\'{nextHopIP}:{nextHopPort}\'] is not towards one of our alternates')
+
+
 # For outbound legs this log identifes nettle and a bunch of other stuff. Works for early and delayed media (with and without SDP)
 p_outboundRouteViaNettle = compile('{date:S}T{timestamp:S} {hostname:S} tvcs: UTCTime="{date2:S} {timestamp2:S}" Module="developer.sip.leg" Level="DEBUG" CodeLocation="ppcmains/sip/sipproxy/SipProxyLeg.cpp({line:d})" Method="SipProxyLeg::routeViaNettleIfNeeded" Thread="{thread:S}":  this="{this:S}" Type="{direction:S}"  routingViaNettle="{routingViaNettle}"  twoInARow="{towInARow}" oneIsATraversalServerZone="{oneIsATraversalServerZone}" isCall="{isCall}" isRefer="{isRefer}" fromClusterPeer="{fromClusterPeer}" fromNettle="{fromNettle}" toNettle="{toNettle}" inboundZone={inboundZone} ({inboundZoneSettings} ) outboundZone={outboundZone} ({outboundZoneSettings} ) CryptoRequired="{cryptoRequired}" ICERequired="{iceRequired}" ReferTerminationRequired="{referTerminationRequired}" TranslateFromMicrosoftRequired="{TranslateFromMicrosoftRequired}" TranslateToMicrosoftRequired="{TranslateToMicrosoftRequired}" routeViaNettle="{routeViaNettle}"')
 
@@ -1029,23 +1038,26 @@ def parse_SendStatefulResponseDirectly(line):
 
 
 def parse_outboundSetNextHop(line):
+    # This is the 8.11 and earlier log
     r = p_outboundSetNextHop.parse(line)
     if r is None:
-        return False
+        # This is the 8.12 and later log
+        r = p_updateAdjacencyDependencies.parse(line)
+        if r is None:
+            return False
+    this = getThisPointer(r['this'])
+    proxyLeg = gProxyLegMap.get(this)
+    if proxyLeg is None:
+        # We should have already created the proxy leg, this is the second log expected after SendSipRequest
+        print this + " parse_outboundSetNextHop : *** Expected to find a proxy leg entry but didn't"
+        print line
     else:
-        this = getThisPointer(r['this'])
-        proxyLeg = gProxyLegMap.get(this)
-        if proxyLeg is None:
-            # We should have already created the proxy leg, this is the second log expected after SendSipRequest
-            print this + " parse_outboundSetNextHop : *** Expected to find a proxy leg entry but didn't"
+        if proxyLeg.direction != r['direction']:
+            print this + " parse_outboundSetNextHop old direction " + proxyLeg.direction + " new direction " + r['direction']
             print line
-        else:
-            if proxyLeg.direction != r['direction']:
-                print this + " parse_outboundSetNextHop old direction " + proxyLeg.direction + " new direction " + r['direction']
-                print line
-            proxyLeg.toIP = r['nextHopIP']
-            gProxyLegMap[this] = proxyLeg
-        return True
+        proxyLeg.toIP = r['nextHopIP']
+        gProxyLegMap[this] = proxyLeg
+    return True
 
 
 def parse_outboundRouteViaNettle(line):
@@ -3120,7 +3132,7 @@ def getExpEMediaLogs(proxyList, routeMapE):
                 logList.append(Log('turn2out', timestamp, shortLog=shortstr, longLog=longstr,
                                    direction=direction, srcEntity=destPhoneIP, logType=logtype))
 
-            elif extIP1 in gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone1':
+            elif extIP1 is not None and extIP1 in gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone1':
                 # This is a connection between exp-e traversal media stream and a TURN port allocated by phone1
                 shortstr = event.extPort1 + symbol1 + event.extPort2
                 longstr = event.extPort1 + symbol1 + route.port1 + symbol2 + route.port2 + symbol1 + event.extPort2
@@ -3133,7 +3145,7 @@ def getExpEMediaLogs(proxyList, routeMapE):
                     logList.append(Log('turn1out', timestamp, shortLog=shortstr, longLog=longstr,
                                        direction=direction, srcEntity='Proxy1', logType=logtype))
 
-            elif extIP1 in gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone2':
+            elif extIP1 is not None and extIP1 in gExpEIP and 24000 <= int(event.extPort1) <= 29999 and turnPort2ProxyIndexMap.get(event.extPort1) == 'phone2':
                 # This is a connection between exp-e traversal media stream and a TURN port allocated by phone2
                 shortstr = event.extPort2 + symbol1 + event.extPort1
                 longstr = event.extPort2 + symbol1 + route.port2 + symbol2 + route.port1 + symbol1 + event.extPort1
@@ -3663,7 +3675,10 @@ def get_file():
     return html
 
 def main_html():
-    app.run(host='0.0.0.0', port=80)
+    if gProductionMode:
+        app.run(host='0.0.0.0', port=80)
+    else:
+        app.run(host='localhost', port=8051, debug=True)
     return
 
 def main():
